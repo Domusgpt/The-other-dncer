@@ -1,0 +1,7 @@
+{
+  "name": "Camera video sprites of jusDNCE AI good start before refactor ",
+  "description": "A music-responsive animated loop generator using Gemini Flash Image and Audio analysis.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
