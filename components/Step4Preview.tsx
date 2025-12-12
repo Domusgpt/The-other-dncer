@@ -22,6 +22,9 @@ type RhythmPhase = 'WARMUP' | 'SWING_LEFT' | 'SWING_RIGHT' | 'DROP' | 'CHAOS';
 // Interpolation Modes
 type InterpMode = 'CUT' | 'SLIDE' | 'MORPH';
 
+// FX Modes
+type FXMode = 'NORMAL' | 'INVERT' | 'BW' | 'STROBE' | 'GHOST';
+
 interface FrameData {
     url: string;
     pose: string;
@@ -74,9 +77,11 @@ export const Step4Preview: React.FC<Step4Props> = ({ state, onGenerateMore, onSp
 
   const beatCounterRef = useRef<number>(0); 
   const closeupLockTimeRef = useRef<number>(0); 
+  const currentDirectionRef = useRef<MoveDirection>('center');
 
   const BASE_ZOOM = 1.15;
   const camZoomRef = useRef<number>(BASE_ZOOM);
+  const camPanXRef = useRef<number>(0); // New: Camera Panning
   
   // Physics
   const charSquashRef = useRef<number>(1.0); 
@@ -99,6 +104,7 @@ export const Step4Preview: React.FC<Step4Props> = ({ state, onGenerateMore, onSp
   const scratchModeRef = useRef<boolean>(false);
   const rgbSplitRef = useRef<number>(0); 
   const flashIntensityRef = useRef<number>(0); 
+  const activeFXModeRef = useRef<FXMode>('NORMAL'); // NEW: For Color Dynamics
   
   const [framesByEnergy, setFramesByEnergy] = useState<Record<EnergyLevel, FrameData[]>>({ low: [], mid: [], high: [] });
   const [closeupFrames, setCloseupFrames] = useState<FrameData[]>([]); 
@@ -166,7 +172,6 @@ export const Step4Preview: React.FC<Step4Props> = ({ state, onGenerateMore, onSp
                 });
             }
             // Mid energy: Virtual Mid-Shot (TV Style Cut)
-            // This creates the "Stitching" effect by reusing the base frame at a different crop
             if (f.energy === 'mid' && f.type === 'body') {
                 sorted.mid.push({
                     url: f.url,
@@ -206,12 +211,19 @@ export const Step4Preview: React.FC<Step4Props> = ({ state, onGenerateMore, onSp
        const img = new Image();
        img.crossOrigin = "anonymous"; 
        img.src = frame.url;
-       img.onload = () => { loadedCount++; if (loadedCount >= totalToLoad) setImagesReady(true); };
+       
+       // ROBUST LOADER: Even if error, we count it so the overlay dismisses
+       const markLoaded = () => {
+           loadedCount++;
+           if (loadedCount >= totalToLoad) setImagesReady(true);
+       }
+       
+       img.onload = markLoaded;
        img.onerror = () => { 
            console.warn(`Failed to load frame: ${frame.pose}`); 
-           loadedCount++; 
-           if (loadedCount >= totalToLoad) setImagesReady(true); 
+           markLoaded();
        };
+       
        images[frame.pose] = img;
        if (frame.energy === 'high' && frame.type === 'body') images[frame.pose + '_vzoom'] = img; 
        if (frame.energy === 'mid' && frame.type === 'body') images[frame.pose + '_vmid'] = img;
@@ -367,6 +379,9 @@ export const Step4Preview: React.FC<Step4Props> = ({ state, onGenerateMore, onSp
              fluidStutterRef.current = 1.0; 
              scratchModeRef.current = true;
              rgbSplitRef.current = 1.0; 
+             
+             // Dynamic Camera Jitter on Scratch
+             masterRotZRef.current += (Math.random() - 0.5) * 10;
         } else {
              const pool = [...framesByEnergy.high, ...closeupFrames];
              if(pool.length > 0) {
@@ -377,7 +392,7 @@ export const Step4Preview: React.FC<Step4Props> = ({ state, onGenerateMore, onSp
         }
     }
 
-    // --- MAIN GROOVE ENGINE ---
+    // --- MAIN GROOVE ENGINE & COLOR DYNAMICS ---
     if (!scratchModeRef.current && bass > 0.6 && (now - lastBeatTimeRef.current) > 300) { 
         lastBeatTimeRef.current = now;
         beatCounterRef.current = (beatCounterRef.current + 1) % 16; 
@@ -388,6 +403,17 @@ export const Step4Preview: React.FC<Step4Props> = ({ state, onGenerateMore, onSp
         else if (beat >= 8 && beat < 12) phase = 'SWING_RIGHT';
         else if (beat === 12 || beat === 13) phase = 'DROP'; 
         else if (beat >= 14) phase = 'CHAOS'; 
+        
+        // COLOR DYNAMICS (User Requested)
+        // Trigger Invert or B&W on CHAOS or DROP
+        if (phase === 'CHAOS' || phase === 'DROP') {
+            const rand = Math.random();
+            if (rand > 0.7) activeFXModeRef.current = 'INVERT';
+            else if (rand > 0.4) activeFXModeRef.current = 'BW';
+            else activeFXModeRef.current = 'NORMAL';
+        } else {
+            activeFXModeRef.current = 'NORMAL';
+        }
 
         // Physics Impulse
         camZoomRef.current = BASE_ZOOM + (bass * 0.35); 
@@ -395,10 +421,10 @@ export const Step4Preview: React.FC<Step4Props> = ({ state, onGenerateMore, onSp
         charBounceYRef.current = -50 * bass; 
         flashIntensityRef.current = 0.8; 
 
-        if (phase === 'SWING_LEFT') targetTiltRef.current = -8;
-        else if (phase === 'SWING_RIGHT') targetTiltRef.current = 8;
+        if (phase === 'SWING_LEFT') { targetTiltRef.current = -8; currentDirectionRef.current = 'left'; }
+        else if (phase === 'SWING_RIGHT') { targetTiltRef.current = 8; currentDirectionRef.current = 'right'; }
         else if (phase === 'CHAOS') targetTiltRef.current = (Math.random() - 0.5) * 25; 
-        else targetTiltRef.current = 0; 
+        else { targetTiltRef.current = 0; currentDirectionRef.current = 'center'; }
 
         let pool: FrameData[] = [];
         
@@ -465,6 +491,13 @@ export const Step4Preview: React.FC<Step4Props> = ({ state, onGenerateMore, onSp
     camZoomRef.current += (BASE_ZOOM - camZoomRef.current) * decay;
     ghostAmountRef.current *= Math.exp(-8 * deltaTime); 
     echoTrailRef.current *= Math.exp(-4 * deltaTime);
+    
+    // Counter-Move Camera Panning (Parallax)
+    // If char moves left, camera pans right slightly
+    let targetPanX = 0;
+    if (currentDirectionRef.current === 'left') targetPanX = 30;
+    else if (currentDirectionRef.current === 'right') targetPanX = -30;
+    camPanXRef.current += (targetPanX - camPanXRef.current) * (4 * deltaTime);
 
     // Full Rotation for Character
     const rotX = superCamActive ? masterRotXRef.current : 0;
@@ -476,6 +509,11 @@ export const Step4Preview: React.FC<Step4Props> = ({ state, onGenerateMore, onSp
         const cy = h/2;
         ctx.clearRect(0, 0, w, h);
         
+        // Apply Visual FX (Invert / B&W)
+        if (activeFXModeRef.current === 'INVERT') ctx.filter = 'invert(1)';
+        else if (activeFXModeRef.current === 'BW') ctx.filter = 'grayscale(1)';
+        else ctx.filter = 'none';
+
         // --- SMART INTERPOLATION BLENDER ---
         const drawLayer = (pose: string, opacity: number, blurAmount: number, skewOffset: number) => {
             const frame = [...framesByEnergy.low, ...framesByEnergy.mid, ...framesByEnergy.high, ...closeupFrames].find(f => f.pose === pose);
@@ -498,7 +536,7 @@ export const Step4Preview: React.FC<Step4Props> = ({ state, onGenerateMore, onSp
             
             const renderFrame = (image: HTMLImageElement, zoom: number, alpha: number, composite: GlobalCompositeOperation = 'source-over', offsetY: number = 0, colorChannel: 'all'|'r'|'b' = 'all') => {
                 ctx.save();
-                ctx.translate(cx, cy + charBounceYRef.current); 
+                ctx.translate(cx + camPanXRef.current, cy + charBounceYRef.current); 
                 
                 if (colorChannel === 'r') ctx.translate(-10 * rgbSplitRef.current, 0);
                 if (colorChannel === 'b') ctx.translate(10 * rgbSplitRef.current, 0);
@@ -519,7 +557,11 @@ export const Step4Preview: React.FC<Step4Props> = ({ state, onGenerateMore, onSp
                 ctx.scale(zoom, zoom);
                 ctx.translate(0, offsetY * dh); 
                 
-                if (blurAmount > 0) ctx.filter = `blur(${blurAmount}px)`;
+                if (blurAmount > 0) {
+                     // Stack with existing filter if any
+                     const currentFilter = ctx.filter === 'none' ? '' : ctx.filter;
+                     ctx.filter = `${currentFilter} blur(${blurAmount}px)`;
+                }
 
                 ctx.globalAlpha = alpha;
                 ctx.globalCompositeOperation = composite;
@@ -579,6 +621,7 @@ export const Step4Preview: React.FC<Step4Props> = ({ state, onGenerateMore, onSp
         }
             
         // GHOSTING FX
+        // Only trigger ghosting on high energy or specific mode
         const ghostImg = poseImagesRef.current[sourcePoseRef.current];
         if (ghostImg && ghostImg.complete && ghostImg.naturalWidth > 0 && ghostAmountRef.current > 0.2) {
              // simplified ghosting logic
@@ -768,12 +811,35 @@ export const Step4Preview: React.FC<Step4Props> = ({ state, onGenerateMore, onSp
           </div>
       )}
 
-      {!imagesReady && (
+      {/* 
+        CRITICAL FIX: The loader now only shows if state.isGenerating is TRUE. 
+        However, if Step4 is mounted (which happens when appState.step === PREVIEW), 
+        we also want to show a loader if images are still decoding locally (!imagesReady).
+        BUT, to prevent it from sticking if isGenerating is false but images failed, 
+        we prioritize the AppState isGenerating flag for the 'EXPANDING REALITY' message,
+        and show a simpler 'Initializing' message for local decoding.
+      */}
+
+      {!imagesReady && !state.isGenerating && (
          <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 z-50 backdrop-blur-md">
              <Loader2 size={48} className="text-brand-500 animate-spin mb-4" />
              <p className="text-white font-mono tracking-widest animate-pulse">NEURAL RIG INITIALIZING...</p>
              <p className="text-gray-500 text-xs mt-2">Loading {frameCount} frames</p>
          </div>
+      )}
+      
+      {state.isGenerating && (
+          <div className="absolute top-24 left-1/2 -translate-x-1/2 z-50 pointer-events-none animate-in slide-in-from-top-4 fade-in">
+             <div className="bg-black/80 border border-brand-500/50 px-6 py-3 rounded-full flex items-center gap-4 shadow-[0_0_30px_rgba(139,92,246,0.3)] backdrop-blur-md">
+                  <div className="relative w-5 h-5">
+                      <div className="w-5 h-5 border-2 border-brand-500/30 border-t-brand-500 rounded-full animate-spin" />
+                  </div>
+                  <div className="flex flex-col">
+                      <span className="text-xs font-bold text-white tracking-widest">EXPANDING REALITY</span>
+                      <span className="text-[10px] text-brand-300 font-mono">Generating variations...</span>
+                  </div>
+             </div>
+          </div>
       )}
 
       {state.audioPreviewUrl && (
@@ -792,13 +858,6 @@ export const Step4Preview: React.FC<Step4Props> = ({ state, onGenerateMore, onSp
                  <button className="glass-button p-2 rounded-lg text-white" onClick={handleExportWidget} title="Download Standalone Widget"><Download size={20} /></button>
              </div>
           </div>
-          
-          {state.isGenerating && (
-              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-black/60 backdrop-blur-xl border border-brand-500/50 p-6 rounded-2xl flex flex-col items-center gap-4 animate-in zoom-in slide-in-from-bottom-4 shadow-[0_0_50px_rgba(139,92,246,0.3)]">
-                  <div className="relative"><div className="w-12 h-12 border-4 border-brand-500/30 border-t-brand-500 rounded-full animate-spin" /><div className="absolute inset-0 flex items-center justify-center"><Sparkles size={16} className="text-white animate-pulse" /></div></div>
-                  <div className="text-center"><h3 className="text-white font-bold tracking-widest mb-1">EXPANDING REALITY</h3><p className="text-brand-200 text-xs font-mono">Generating new variations...</p></div>
-              </div>
-          )}
 
           <div className="flex flex-col items-center gap-4 pointer-events-auto w-full max-w-2xl mx-auto">
               <div className="flex items-center gap-4 bg-black/60 backdrop-blur-xl border border-white/10 p-2 rounded-full shadow-2xl">

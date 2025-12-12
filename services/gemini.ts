@@ -9,6 +9,29 @@ const API_KEY = process.env.API_KEY || 'AIzaSyDFjSQY6Ne38gtzEd6Q_5zyyW65ah5_anw'
 
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
+// Helper to wrap image loading in a timeout to prevent hanging
+const loadImageWithTimeout = (src: string, timeoutMs: number = 5000): Promise<HTMLImageElement> => {
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.crossOrigin = "anonymous";
+        const timer = setTimeout(() => {
+            img.onload = null;
+            img.onerror = null;
+            reject(new Error("Image load timed out"));
+        }, timeoutMs);
+
+        img.onload = () => {
+            clearTimeout(timer);
+            resolve(img);
+        };
+        img.onerror = (e) => {
+            clearTimeout(timer);
+            reject(new Error("Image load failed"));
+        };
+        img.src = src;
+    });
+};
+
 const fileToBase64 = (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -30,13 +53,22 @@ const resizeImage = (file: File, maxDim: number = 384): Promise<string> => {
 
         let url = '';
         try { url = URL.createObjectURL(file); } catch (e) { 
+            // Fallback immediately if createObjectURL fails
             return fileToBase64(file).then(resolve).catch(reject); 
         }
 
         const img = new Image();
         img.crossOrigin = "anonymous";
         
+        // Safety timeout
+        const timeout = setTimeout(() => {
+            console.warn("Resize timed out, falling back to base64");
+            URL.revokeObjectURL(url);
+            fileToBase64(file).then(resolve).catch(reject);
+        }, 3000);
+
         img.onload = () => {
+            clearTimeout(timeout);
             try {
                 const canvas = document.createElement('canvas');
                 let width = img.width;
@@ -67,6 +99,7 @@ const resizeImage = (file: File, maxDim: number = 384): Promise<string> => {
             }
         };
         img.onerror = (e) => {
+            clearTimeout(timeout);
             URL.revokeObjectURL(url);
             console.warn("Image load for resize failed, falling back to original");
             fileToBase64(file).then(resolve).catch(reject);
@@ -86,13 +119,12 @@ export const fileToGenericBase64 = async (file: File): Promise<string> => {
 
 // --- SPRITE SHEET SLICER (MECHANICAL GRID FIX) ---
 const sliceSpriteSheet = (base64Image: string, rows: number, cols: number): Promise<string[]> => {
-    return new Promise((resolve, reject) => {
-        const img = new Image();
-        img.onload = async () => {
+    return new Promise(async (resolve, reject) => {
+        try {
+            // Use timeout wrapper to prevent hanging
+            const img = await loadImageWithTimeout(base64Image, 8000);
+            
             // 1. MECHANICAL ALIGNMENT
-            // We force the image into a 1024x1024 square.
-            // Even if the input is slightly rectangular, this 'stretches' the grid to align
-            // perfectly with our 25% cuts. This is more robust than cropping.
             const SHEET_SIZE = 1024;
             const normCanvas = document.createElement('canvas');
             normCanvas.width = SHEET_SIZE;
@@ -108,9 +140,7 @@ const sliceSpriteSheet = (base64Image: string, rows: number, cols: number): Prom
             const cellW = SHEET_SIZE / cols; // 256
             const cellH = SHEET_SIZE / rows; // 256
             
-            // CONSERVATIVE CROP:
-            // Only crop 10% to remove grid lines. 
-            // We rely on the prompt to keep the character centered.
+            // CONSERVATIVE CROP
             const cropFactor = 0.10; 
             const cropX = cellW * cropFactor;
             const cropY = cellH * cropFactor;
@@ -118,8 +148,8 @@ const sliceSpriteSheet = (base64Image: string, rows: number, cols: number): Prom
             const sourceH = cellH * (1 - 2 * cropFactor);
 
             const frames: string[] = [];
-            const promises: Promise<void>[] = [];
-
+            
+            // We do this synchronously to avoid Promise overhead for 16 frames which can be buggy
             for (let r = 0; r < rows; r++) {
                 for (let c = 0; c < cols; c++) {
                     const cellCanvas = document.createElement('canvas');
@@ -137,29 +167,25 @@ const sliceSpriteSheet = (base64Image: string, rows: number, cols: number): Prom
                             0, 0, cellCanvas.width, cellCanvas.height
                         );
                         
-                        // Convert to Blob URL
-                        const p = new Promise<void>(resolveBlob => {
-                            cellCanvas.toBlob(blob => {
-                                if (blob) frames.push(URL.createObjectURL(blob));
-                                resolveBlob();
-                            }, 'image/jpeg', 0.85);
-                        });
-                        promises.push(p);
+                        // Use dataURL instead of toBlob for better compatibility and speed in this context
+                        // (Blobs are better for memory, but DataURLs are sync and safer for small batches)
+                        frames.push(cellCanvas.toDataURL('image/jpeg', 0.85));
                     }
                 }
             }
-            
-            await Promise.all(promises);
             resolve(frames);
-        };
-        img.onerror = reject;
-        img.src = base64Image;
+
+        } catch (e) {
+            console.error("Slice Sprite Sheet failed", e);
+            reject(e);
+        }
     });
 };
 
 const mirrorFrame = (frameUrl: string): Promise<string> => {
     return new Promise((resolve) => {
         const img = new Image();
+        img.crossOrigin = "anonymous";
         img.onload = () => {
             const canvas = document.createElement('canvas');
             canvas.width = img.width;
@@ -169,14 +195,12 @@ const mirrorFrame = (frameUrl: string): Promise<string> => {
                 ctx.translate(canvas.width, 0);
                 ctx.scale(-1, 1);
                 ctx.drawImage(img, 0, 0);
-                canvas.toBlob(blob => {
-                    if (blob) resolve(URL.createObjectURL(blob));
-                    else resolve(frameUrl);
-                }, 'image/jpeg', 0.8);
+                resolve(canvas.toDataURL('image/jpeg', 0.8));
             } else {
                 resolve(frameUrl);
             }
         };
+        img.onerror = () => resolve(frameUrl); // Fail gracefull
         img.src = frameUrl;
     });
 };
