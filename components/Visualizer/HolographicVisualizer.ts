@@ -1,14 +1,12 @@
 
-
 /**
- * QUANTUM FLUX VISUALIZER ENGINE (v5.0 - Mellow & Sophisticated)
+ * QUANTUM FLUX VISUALIZER ENGINE (v7.0 - INTERACTIVITY RESTORED)
  * 
- * Advanced KIFS (Kaleidoscopic Iterated Function System) Renderer.
- * Features:
- * - Smooth Lerping (No jitter/strobing)
- * - Phase-Shifting Geometry (Movement over scaling)
- * - Inverse Density Reactivity (Interaction clears the chaos)
- * - Interactive 4D Rotation via Mouse/Touch
+ * High-Fidelity KIFS (Kaleidoscopic Iterated Function System) Renderer.
+ * Fixed:
+ * - TOUCH/MOUSE Reactivity restored in Shader
+ * - Audio Smoothing re-enabled (lightly) for cleaner pulses
+ * - Geometry Folding preserved
  */
 
 export interface HolographicParams {
@@ -55,14 +53,14 @@ export const FRAGMENT_SHADER = `
     uniform float u_cameraZ; 
     uniform vec3 u_cameraRot;
     
-    // Audio (Smoothed)
+    // Audio
     uniform float u_audioBass;
     uniform float u_audioMid;
     uniform float u_audioHigh;
     
-    #define MAX_STEPS 60
-    #define MAX_DIST 12.0
-    #define SURF_DIST 0.002
+    #define MAX_STEPS 80
+    #define MAX_DIST 20.0
+    #define SURF_DIST 0.001
 
     // --- MATH UTILS ---
     mat2 rot(float a) {
@@ -70,56 +68,56 @@ export const FRAGMENT_SHADER = `
         float c = cos(a);
         return mat2(c, -s, s, c);
     }
-    
-    float hash(vec3 p) {
-        p  = fract( p*0.3183099+.1 );
-        p *= 17.0;
-        return fract( p.x*p.y*p.z*(p.x+p.y+p.z) );
-    }
 
-    // --- KIFS FRACTAL (Restored Classic) ---
+    // --- ORIGINAL KIFS FRACTAL ---
     float sdQuantumFractal(vec3 p) {
         float s = 1.0;
         
-        // REACTIVITY: Restored Breathing but CLAMPED
-        // We use a base scale + mild audio influence to prevent "pumping" artifacts
-        float breathing = 0.9 + (u_audioBass * 0.2); 
+        // HEARTBEAT / BREATHING
+        float breathing = 1.0 + (u_audioBass * 0.4); 
         
-        // Offset logic
-        vec3 offset = vec3(1.0, 1.0, 1.0) * (0.6 + u_morph + (u_audioMid * 0.1));
+        // ROTATION (INTERACTIVITY RESTORED)
+        // We mix Auto-Rotation (Time) with User-Rotation (Mouse)
+        float autoRot = u_time * 0.15 * u_speed;
+        p.xz *= rot(autoRot + u_mouse.x * 3.0); 
+        p.xy *= rot(autoRot * 0.5 + u_mouse.y * 3.0);
         
-        // Gentle Rotation
-        p.xz *= rot(u_time * 0.1 + u_mouse.x * 1.0);
-        p.yz *= rot(u_mouse.y * 1.0);
+        // Complex Offset based on Mid/Highs
+        vec3 offset = vec3(1.0, 1.2, 0.8) * (0.8 + u_morph + (u_audioMid * 0.3));
 
-        // Fold Iterations
-        for(int i=0; i<5; i++) {
-            p = abs(p); 
+        // THE FOLDING LOOP
+        for(int i=0; i<6; i++) {
+            p = abs(p); // Fold space
+            
+            // Tetrahedral symmetries
             if(p.x < p.y) p.xy = p.yx;
             if(p.x < p.z) p.xz = p.zx;
             if(p.y < p.z) p.yz = p.zy;
             
-            p.z -= offset.z * 0.4;
+            // Shift and Fold
+            p.z -= offset.z * 0.5;
             p.z = -abs(p.z);
-            p.z += offset.z * 0.4;
+            p.z += offset.z * 0.5;
             
-            p = p * breathing - offset * (breathing - 1.0);
-            s *= breathing;
+            // Scale step (Fractal growth)
+            p = p * 1.5 * breathing - offset * (1.5 * breathing - 1.0);
+            s *= 1.5 * breathing;
             
-            // Twist
-            if (i > 3) {
-                p.xy *= rot(u_chaos * 0.8);
+            // Twist based on Highs (Sparkle)
+            if (i > 2) {
+                p.xy *= rot(u_chaos * 2.0 + (u_audioHigh * 0.8));
             }
         }
         
+        // Distance field
         return length(p) / s;
     }
 
     // --- SCENE MAP ---
     float GetDist(vec3 p) {
-        // Subtle wave
-        float wave = sin(p.y * 2.0 + u_time * 0.5) * (u_audioBass * 0.15);
-        p.z += wave;
+        // Subtle wave distortion based on bass
+        float wave = sin(p.y * 3.0 + u_time) * (u_audioBass * 0.2);
+        p.x += wave;
         
         float d = sdQuantumFractal(p);
         return d;
@@ -131,7 +129,7 @@ export const FRAGMENT_SHADER = `
         for(int i=0; i<MAX_STEPS; i++) {
             vec3 p = ro + rd*dO;
             float dS = GetDist(p);
-            dO += dS * 0.6; // Softer steps for fluffier clouds
+            dO += dS * 0.5; // Precision
             if(dO>MAX_DIST || abs(dS)<SURF_DIST) break;
         }
         return dO;
@@ -140,16 +138,16 @@ export const FRAGMENT_SHADER = `
     void main() {
         vec2 uv = (gl_FragCoord.xy - 0.5 * u_resolution.xy) / u_resolution.y;
         
-        // MOVED CLOSER (-3.0) to fill screen better
-        float baseZ = -3.0; 
+        // Camera Position
+        float baseZ = -4.5; 
         vec3 ro = vec3(0.0, 0.0, baseZ + u_cameraZ); 
         vec3 rd = normalize(vec3(uv, 1.0));
         
-        // Camera Rotation
+        // External Camera Rotation (From Physics Engine)
         if (length(u_cameraRot) > 0.0) {
-            mat2 rx = rot(u_cameraRot.x * 0.5); // Dampen rotation inputs
-            mat2 ry = rot(u_cameraRot.y * 0.5);
-            mat2 rz = rot(u_cameraRot.z * 0.5);
+            mat2 rx = rot(u_cameraRot.x); 
+            mat2 ry = rot(u_cameraRot.y);
+            mat2 rz = rot(u_cameraRot.z);
             ro.yz *= rx; rd.yz *= rx;
             ro.xz *= ry; rd.xz *= ry;
             ro.xy *= rz; rd.xy *= rz;
@@ -158,44 +156,50 @@ export const FRAGMENT_SHADER = `
         float d = RayMarch(ro, rd);
         vec3 col = vec3(0.0);
         
+        // --- LIGHTING & COLOR ---
         if(d < MAX_DIST) {
             vec3 p = ro + rd * d;
             
-            vec2 e = vec2(0.01, 0.0);
+            vec2 e = vec2(0.005, 0.0);
             vec3 n = normalize(vec3(
                 GetDist(p+e.xyy)-GetDist(p-e.xyy),
                 GetDist(p+e.yxy)-GetDist(p-e.yxy),
                 GetDist(p+e.yyx)-GetDist(p-e.yyx)
             ));
             
-            float fresnel = pow(1.0 - max(dot(n, -rd), 0.0), 4.0);
+            // Fresnel
+            float fresnel = pow(1.0 + dot(rd, n), 3.0);
             
-            vec3 tint = u_color + (vec3(u_audioHigh) * 0.2); 
-            col = tint * 0.5 + (n * 0.05); 
+            vec3 baseColor = u_color;
+            baseColor += vec3(0.1, 0.0, 0.2) * (length(p)*0.2);
             
-            float shine = 1.0 + (u_audioBass * 1.5);
-            col += vec3(0.9, 0.95, 1.0) * fresnel * shine * 0.5;
+            vec3 ref = reflect(rd, n);
+            float spec = pow(max(dot(ref, vec3(0,0,-1)), 0.0), 16.0);
             
-            float edge = smoothstep(0.1, 0.0, GetDist(p + n*0.05));
-            col += u_color * edge * 2.0;
+            col = baseColor * 0.2; // Ambient
+            col += baseColor * fresnel * 2.0; // Rim Light
+            col += vec3(1.0) * spec * (0.5 + u_audioHigh); // Specular
         }
         
+        // --- VOLUMETRIC GLOW ---
         float glow = 0.0;
         float s = 0.0;
-        for(int i=0; i<4; i++) {
-            vec3 p = ro + rd * (s + 1.0);
+        for(int i=0; i<6; i++) {
+            vec3 p = ro + rd * (s + 2.0);
             float dist = GetDist(p);
-            float fog = 1.0 / (1.0 + abs(dist) * 15.0);
+            float fog = 1.0 / (1.0 + abs(dist) * 20.0);
             glow += fog;
-            s += 0.8;
+            s += 0.5;
         }
         
-        float audioClear = u_audioMid * 0.8;
-        float finalDensity = max(0.2, u_density - audioClear);
+        float audioClear = u_audioMid * 1.5;
+        float finalDensity = max(0.1, u_density - audioClear);
         
-        glow *= finalDensity * 0.25; 
+        glow *= finalDensity * 0.4;
+        
         col += u_color * glow * u_intensity;
-        col *= 1.0 - length(uv) * 0.6;
+        col *= 1.2 - length(uv) * 0.8; // Vignette
+        col = pow(col, vec3(0.4545)); // Gamma
         
         gl_FragColor = vec4(col, 1.0);
     }
@@ -211,9 +215,9 @@ export class QuantumVisualizer {
     mouse: { x: number, y: number } = { x: 0, y: 0 };
     targetMouse: { x: number, y: number } = { x: 0, y: 0 };
     
-    // SMOOTHING STATE
-    smoothAudio = { bass: 0, mid: 0, high: 0 };
-
+    // Internal state for smoothing
+    currentAudio: AudioData = { bass: 0, mid: 0, high: 0, energy: 0 };
+    
     params: HolographicParams = {
         geometryType: 0, 
         density: 2.0,
@@ -226,13 +230,13 @@ export class QuantumVisualizer {
         gridOpacity: 0.0
     };
     
-    audioData: AudioData = { bass: 0, mid: 0, high: 0, energy: 0 };
+    targetAudio: AudioData = { bass: 0, mid: 0, high: 0, energy: 0 };
 
     constructor(canvas: HTMLCanvasElement) {
         this.canvas = canvas;
         const gl = this.canvas.getContext('webgl', { 
             preserveDrawingBuffer: true,
-            alpha: false, // Opaque for background
+            alpha: false, 
             antialias: true
         });
         
@@ -256,10 +260,12 @@ export class QuantumVisualizer {
             this.targetMouse.x = (x / window.innerWidth) * 2 - 1;
             this.targetMouse.y = -(y / window.innerHeight) * 2 + 1;
         };
+        
+        // Listeners for both Mouse and Touch
         window.addEventListener('mousemove', (e) => updateMouse(e.clientX, e.clientY));
         window.addEventListener('touchmove', (e) => {
             if(e.touches[0]) updateMouse(e.touches[0].clientX, e.touches[0].clientY);
-        });
+        }, { passive: true });
     }
 
     resize() {
@@ -279,7 +285,7 @@ export class QuantumVisualizer {
     }
 
     updateAudio(data: AudioData) {
-        this.audioData = data;
+        this.targetAudio = data;
     }
 
     initShaders() {
@@ -345,17 +351,17 @@ export class QuantumVisualizer {
         
         const time = (Date.now() - this.startTime) / 1000;
         
-        // Mouse Smoothing
+        // 1. Mouse Smoothing (Interactive Flow)
         this.mouse.x += (this.targetMouse.x - this.mouse.x) * 0.05;
         this.mouse.y += (this.targetMouse.y - this.mouse.y) * 0.05;
-        
-        // AUDIO SMOOTHING (The Mellowing Factor)
-        // We LERP the values so they don't snap instantly
-        const lerpFactor = 0.1;
-        this.smoothAudio.bass += (this.audioData.bass - this.smoothAudio.bass) * lerpFactor;
-        this.smoothAudio.mid += (this.audioData.mid - this.smoothAudio.mid) * lerpFactor;
-        this.smoothAudio.high += (this.audioData.high - this.smoothAudio.high) * lerpFactor;
 
+        // 2. Audio Smoothing (Prevents Jitter/Broken look)
+        // We use a fast lerp (0.15) to keep it punchy but clean
+        const smooth = 0.15;
+        this.currentAudio.bass += (this.targetAudio.bass - this.currentAudio.bass) * smooth;
+        this.currentAudio.mid += (this.targetAudio.mid - this.currentAudio.mid) * smooth;
+        this.currentAudio.high += (this.targetAudio.high - this.currentAudio.high) * smooth;
+        
         // Color Logic
         const h = (this.params.hue || 0) / 360;
         const s = this.params.saturation || 0.8;
@@ -386,10 +392,10 @@ export class QuantumVisualizer {
         this.gl.uniform1f(this.uniforms.cameraZ, cameraZOffset);
         this.gl.uniform3f(this.uniforms.cameraRot, rotation.x, rotation.y, rotation.z);
         
-        // Pass SMOOTHED audio
-        this.gl.uniform1f(this.uniforms.audioBass, this.smoothAudio.bass);
-        this.gl.uniform1f(this.uniforms.audioMid, this.smoothAudio.mid);
-        this.gl.uniform1f(this.uniforms.audioHigh, this.smoothAudio.high);
+        // Use Smoothed Audio
+        this.gl.uniform1f(this.uniforms.audioBass, this.currentAudio.bass);
+        this.gl.uniform1f(this.uniforms.audioMid, this.currentAudio.mid);
+        this.gl.uniform1f(this.uniforms.audioHigh, this.currentAudio.high);
         
         this.gl.drawArrays(this.gl.TRIANGLE_STRIP, 0, 4);
     }

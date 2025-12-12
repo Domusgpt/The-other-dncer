@@ -1,5 +1,4 @@
 
-
 import { HolographicParams } from "./components/Visualizer/HolographicVisualizer";
 
 export enum AppStep {
@@ -11,7 +10,7 @@ export enum AppStep {
 export type StyleCategory = 'Cinematic' | 'Anime/2D' | 'Digital/Glitch' | 'Artistic';
 export type SubjectCategory = 'CHARACTER' | 'TEXT' | 'SYMBOL';
 export type FrameType = 'body' | 'closeup'; // Distinguish full body from facial frames
-export type SheetRole = 'base' | 'alt' | 'flourish'; // Which sheet did this come from?
+export type SheetRole = 'base' | 'alt' | 'flourish' | 'smooth'; // Added 'smooth'
 export type MoveDirection = 'center' | 'left' | 'right'; // NEW: For choreography
 
 export interface StylePreset {

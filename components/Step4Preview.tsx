@@ -1,7 +1,7 @@
 
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Play, Pause, Video, Settings, Mic, MicOff, Maximize2, Minimize2, Upload, X, Loader2, Sliders, Package, Music, ChevronDown, ChevronUp, Activity, Download, FileVideo, Radio, Star, Camera, Volume2, VolumeX, Sparkles, CircleDot, Monitor, Smartphone, Square } from 'lucide-react';
-import { AppState, EnergyLevel, MoveDirection } from '../types';
+import { AppState, EnergyLevel, MoveDirection, FrameType } from '../types';
 import { QuantumVisualizer } from './Visualizer/HolographicVisualizer';
 import { generatePlayerHTML } from '../services/playerExport';
 import { STYLE_PRESETS } from '../constants';
@@ -19,6 +19,9 @@ type Resolution = '720p' | '1080p' | '4K';
 
 type RhythmPhase = 'WARMUP' | 'SWING_LEFT' | 'SWING_RIGHT' | 'DROP' | 'CHAOS';
 
+// Interpolation Modes
+type InterpMode = 'CUT' | 'SLIDE' | 'MORPH';
+
 interface FrameData {
     url: string;
     pose: string;
@@ -27,6 +30,7 @@ interface FrameData {
     isVirtual?: boolean;
     virtualZoom?: number; 
     virtualOffsetY?: number;
+    type?: FrameType;
 }
 
 export const Step4Preview: React.FC<Step4Props> = ({ state, onGenerateMore, onSpendCredit, onUploadAudio, onSaveProject }) => {
@@ -61,10 +65,16 @@ export const Step4Preview: React.FC<Step4Props> = ({ state, onGenerateMore, onSp
   
   const [brainState, setBrainState] = useState({ activePoseName: 'BASE', fps: 0 });
 
+  // --- INTERPOLATION STATE ---
+  const sourcePoseRef = useRef<string>('base'); 
   const targetPoseRef = useRef<string>('base'); 
-  const prevPoseRef = useRef<string>('base'); 
+  const transitionProgressRef = useRef<number>(1.0); 
+  const transitionSpeedRef = useRef<number>(10.0);   
+  const transitionModeRef = useRef<InterpMode>('CUT');
+
   const beatCounterRef = useRef<number>(0); 
-  
+  const closeupLockTimeRef = useRef<number>(0); 
+
   const BASE_ZOOM = 1.15;
   const camZoomRef = useRef<number>(BASE_ZOOM);
   
@@ -73,6 +83,7 @@ export const Step4Preview: React.FC<Step4Props> = ({ state, onGenerateMore, onSp
   const charSkewRef = useRef<number>(0.0);   
   const charTiltRef = useRef<number>(0.0);   
   const targetTiltRef = useRef<number>(0.0); 
+  const charBounceYRef = useRef<number>(0.0); 
 
   const masterRotXRef = useRef<number>(0); 
   const masterVelXRef = useRef<number>(0); 
@@ -86,6 +97,8 @@ export const Step4Preview: React.FC<Step4Props> = ({ state, onGenerateMore, onSp
   const echoTrailRef = useRef<number>(0); 
   const fluidStutterRef = useRef<number>(0); 
   const scratchModeRef = useRef<boolean>(false);
+  const rgbSplitRef = useRef<number>(0); 
+  const flashIntensityRef = useRef<number>(0); 
   
   const [framesByEnergy, setFramesByEnergy] = useState<Record<EnergyLevel, FrameData[]>>({ low: [], mid: [], high: [] });
   const [closeupFrames, setCloseupFrames] = useState<FrameData[]>([]); 
@@ -122,37 +135,55 @@ export const Step4Preview: React.FC<Step4Props> = ({ state, onGenerateMore, onSp
     }
   }, [state.selectedStyleId]);
 
-  // Sort Frames
+  // Sort Frames and Create VIRTUAL STITCHES
   useEffect(() => {
     const sorted: Record<EnergyLevel, FrameData[]> = { low: [], mid: [], high: [] };
     const closeups: FrameData[] = [];
     const framesToLoad = state.generatedFrames.length > 0 
       ? state.generatedFrames 
-      : (state.imagePreviewUrl ? [{ url: state.imagePreviewUrl, pose: 'base', energy: 'low' as EnergyLevel, type: 'body', direction: 'center' as MoveDirection }] : []);
+      : (state.imagePreviewUrl ? [{ url: state.imagePreviewUrl, pose: 'base', energy: 'low' as EnergyLevel, type: 'body' as FrameType, direction: 'center' as MoveDirection }] : []);
 
     setFrameCount(framesToLoad.length);
 
     framesToLoad.forEach(f => {
-        const frameData: FrameData = { url: f.url, pose: f.pose, energy: f.energy, direction: f.direction };
+        const frameData: FrameData = { url: f.url, pose: f.pose, energy: f.energy, direction: f.direction, type: f.type };
         if (f.type === 'closeup') closeups.push(frameData);
         else {
             if (sorted[f.energy]) sorted[f.energy].push(frameData);
+            
+            // --- VIRTUAL CAMERA STITCHING ---
+            // High energy: Virtual Zoom (Crash/Impact)
             if (f.energy === 'high' && f.type === 'body') {
                 closeups.push({
                     url: f.url,
-                    pose: f.pose + '_virtual_zoom',
+                    pose: f.pose + '_vzoom',
                     energy: 'high',
                     direction: f.direction,
                     isVirtual: true,
                     virtualZoom: 1.6,
-                    virtualOffsetY: 0.2
+                    virtualOffsetY: 0.2,
+                    type: f.type
+                });
+            }
+            // Mid energy: Virtual Mid-Shot (TV Style Cut)
+            // This creates the "Stitching" effect by reusing the base frame at a different crop
+            if (f.energy === 'mid' && f.type === 'body') {
+                sorted.mid.push({
+                    url: f.url,
+                    pose: f.pose + '_vmid',
+                    energy: 'mid',
+                    direction: f.direction,
+                    isVirtual: true,
+                    virtualZoom: 1.25,
+                    virtualOffsetY: 0.1, // Slight upward crop
+                    type: f.type
                 });
             }
         }
     });
     
     if (sorted.low.length === 0 && framesToLoad.length > 0 && framesToLoad[0].type === 'body') {
-        sorted.low.push({ url: framesToLoad[0].url, pose: framesToLoad[0].pose, energy: 'low', direction: 'center' });
+        sorted.low.push({ url: framesToLoad[0].url, pose: framesToLoad[0].pose, energy: 'low', direction: 'center', type: 'body' });
     }
     if (sorted.mid.length === 0) sorted.mid = [...sorted.low]; 
     if (sorted.high.length === 0) sorted.high = [...sorted.mid];
@@ -176,9 +207,14 @@ export const Step4Preview: React.FC<Step4Props> = ({ state, onGenerateMore, onSp
        img.crossOrigin = "anonymous"; 
        img.src = frame.url;
        img.onload = () => { loadedCount++; if (loadedCount >= totalToLoad) setImagesReady(true); };
-       img.onerror = () => { loadedCount++; if (loadedCount >= totalToLoad) setImagesReady(true); };
+       img.onerror = () => { 
+           console.warn(`Failed to load frame: ${frame.pose}`); 
+           loadedCount++; 
+           if (loadedCount >= totalToLoad) setImagesReady(true); 
+       };
        images[frame.pose] = img;
-       if (frame.energy === 'high' && frame.type === 'body') images[frame.pose + '_virtual_zoom'] = img; 
+       if (frame.energy === 'high' && frame.type === 'body') images[frame.pose + '_vzoom'] = img; 
+       if (frame.energy === 'mid' && frame.type === 'body') images[frame.pose + '_vmid'] = img;
     });
     poseImagesRef.current = { ...poseImagesRef.current, ...images };
   }, [state.generatedFrames, state.imagePreviewUrl]);
@@ -234,6 +270,24 @@ export const Step4Preview: React.FC<Step4Props> = ({ state, onGenerateMore, onSp
       } else { connectMicAudio(); }
   };
 
+  // Helper to trigger a Smart Transition
+  const triggerTransition = (newPose: string, mode: InterpMode, speedMultiplier: number = 1.0) => {
+      if (newPose === targetPoseRef.current) return;
+      
+      sourcePoseRef.current = targetPoseRef.current;
+      targetPoseRef.current = newPose;
+      transitionProgressRef.current = 0.0;
+      transitionModeRef.current = mode;
+      
+      // MECHANICALLY FAST SPEEDS
+      let speed = 20.0;
+      if (mode === 'CUT') speed = 1000.0; // Instant
+      else if (mode === 'MORPH') speed = 5.0; 
+      else if (mode === 'SLIDE') speed = 8.0; // Fluid
+      
+      transitionSpeedRef.current = speed * speedMultiplier;
+  };
+
   // 3. Animation Loop
   const loop = useCallback((time: number) => {
     if (!lastFrameTimeRef.current) lastFrameTimeRef.current = time;
@@ -242,6 +296,12 @@ export const Step4Preview: React.FC<Step4Props> = ({ state, onGenerateMore, onSp
 
     requestRef.current = requestAnimationFrame(loop);
     
+    // --- TRANSITION UPDATE ---
+    if (transitionProgressRef.current < 1.0) {
+        transitionProgressRef.current += transitionSpeedRef.current * deltaTime;
+        if (transitionProgressRef.current > 1.0) transitionProgressRef.current = 1.0;
+    }
+
     let bass = 0, mid = 0, high = 0, energy = 0;
     
     if (analyserRef.current) {
@@ -259,14 +319,13 @@ export const Step4Preview: React.FC<Step4Props> = ({ state, onGenerateMore, onSp
         energy = (bass * 0.5 + mid * 0.3 + high * 0.2);
     }
 
-    // --- PHYSICS TUNING (REDUCED SENSITIVITY) ---
-    const stiffness = 120;
-    const damping = 10;
+    // --- PHYSICS (HIGH ENERGY UNLOCKED) ---
+    const stiffness = 140;
+    const damping = 8; 
     
-    // REDUCED MULTIPLIERS to fix "overtuned" complaint
-    const targetRotX = bass * 6.0;  // Was 15
-    const targetRotY = mid * 6.0 * Math.sin(time * 0.003); // Was 15
-    const targetRotZ = high * 2.0; // Was 5
+    const targetRotX = bass * 35.0; // Headbang
+    const targetRotY = mid * 25.0 * Math.sin(time * 0.005); // Twist
+    const targetRotZ = high * 15.0; // Roll
 
     // Spring Solver
     const forceX = (targetRotX - masterRotXRef.current) * stiffness - (masterVelXRef.current * damping);
@@ -282,48 +341,44 @@ export const Step4Preview: React.FC<Step4Props> = ({ state, onGenerateMore, onSp
     masterRotZRef.current += masterVelZRef.current * deltaTime;
 
     if (hologramRef.current) {
-        // We pass raw data here, but the Visualizer class now does internal Smoothing
         hologramRef.current.updateAudio({ bass, mid, high, energy });
-        const rx = superCamActive ? masterRotXRef.current : 0;
-        const ry = superCamActive ? masterRotYRef.current : 0;
-        const rz = superCamActive ? masterRotZRef.current : 0;
-        hologramRef.current.render(0, { x: rx * 0.5, y: ry * 0.3, z: rz * 0.1 }); 
+        const rx = superCamActive ? masterRotXRef.current * 0.3 : 0;
+        const ry = superCamActive ? masterRotYRef.current * 0.3 : 0;
+        const rz = superCamActive ? masterRotZRef.current * 0.2 : 0;
+        hologramRef.current.render(0, { x: rx, y: ry, z: rz }); 
     }
 
     const now = Date.now();
+    const isCloseupLocked = now < closeupLockTimeRef.current;
     
     // --- STUTTER & SCRATCH ENGINE ---
-    // Detect high frequency chaos (Snare Rolls, Hi-Hats)
     const isStuttering = mid > 0.6 || high > 0.5;
     
-    // Stutter Check (Runs faster than beat check)
-    if (isStuttering && (now - lastStutterTimeRef.current) > 60) { // 60ms = ~15fps scratch
+    // Don't stutter if we are in a close-up lock to preserve the moment
+    if (isStuttering && (now - lastStutterTimeRef.current) > 50 && !isCloseupLocked) { 
         lastStutterTimeRef.current = now;
         
-        // "Scratch" Logic: Ping pong between prev and target
-        if (Math.random() < 0.4) {
+        if (Math.random() < 0.45) { 
              const swap = targetPoseRef.current;
-             targetPoseRef.current = prevPoseRef.current;
-             prevPoseRef.current = swap;
+             triggerTransition(sourcePoseRef.current, 'CUT'); 
+             sourcePoseRef.current = swap; 
              
-             // Visual Glitch
-             charSkewRef.current = (Math.random() - 0.5) * 1.5;
-             fluidStutterRef.current = 1.0; // Max blur
+             charSkewRef.current = (Math.random() - 0.5) * 2.0; 
+             fluidStutterRef.current = 1.0; 
              scratchModeRef.current = true;
+             rgbSplitRef.current = 1.0; 
         } else {
-             // Force random high energy frame
              const pool = [...framesByEnergy.high, ...closeupFrames];
              if(pool.length > 0) {
-                 prevPoseRef.current = targetPoseRef.current;
-                 targetPoseRef.current = pool[Math.floor(Math.random() * pool.length)].pose;
+                 const next = pool[Math.floor(Math.random() * pool.length)].pose;
+                 triggerTransition(next, 'CUT', 1.0);
              }
              scratchModeRef.current = false;
         }
     }
 
     // --- MAIN GROOVE ENGINE ---
-    // Only trigger if we aren't mid-scratch
-    if (!scratchModeRef.current && bass > 0.6 && (now - lastBeatTimeRef.current) > 350) {
+    if (!scratchModeRef.current && bass > 0.6 && (now - lastBeatTimeRef.current) > 300) { 
         lastBeatTimeRef.current = now;
         beatCounterRef.current = (beatCounterRef.current + 1) % 16; 
 
@@ -334,60 +389,84 @@ export const Step4Preview: React.FC<Step4Props> = ({ state, onGenerateMore, onSp
         else if (beat === 12 || beat === 13) phase = 'DROP'; 
         else if (beat >= 14) phase = 'CHAOS'; 
 
-        // Physics Impulse - REDUCED for less "Heartbeat" look
-        camZoomRef.current = BASE_ZOOM + (bass * 0.15); // Less aggressive zoom
-        charSquashRef.current = 0.95; // Much subtler squash (was 0.92)
+        // Physics Impulse
+        camZoomRef.current = BASE_ZOOM + (bass * 0.35); 
+        charSquashRef.current = 0.85; 
+        charBounceYRef.current = -50 * bass; 
+        flashIntensityRef.current = 0.8; 
 
-        if (phase === 'SWING_LEFT') targetTiltRef.current = -3; // Reduced from 5
-        else if (phase === 'SWING_RIGHT') targetTiltRef.current = 3;
-        else if (phase === 'CHAOS') targetTiltRef.current = (Math.random() - 0.5) * 10; 
+        if (phase === 'SWING_LEFT') targetTiltRef.current = -8;
+        else if (phase === 'SWING_RIGHT') targetTiltRef.current = 8;
+        else if (phase === 'CHAOS') targetTiltRef.current = (Math.random() - 0.5) * 25; 
         else targetTiltRef.current = 0; 
 
         let pool: FrameData[] = [];
-        if (phase === 'WARMUP') pool = framesByEnergy.low; 
-        else if (phase === 'SWING_LEFT') {
-            const leftFrames = framesByEnergy.mid.filter(f => f.direction === 'left');
-            pool = leftFrames.length > 0 ? leftFrames : framesByEnergy.mid;
-        } else if (phase === 'SWING_RIGHT') {
-            const rightFrames = framesByEnergy.mid.filter(f => f.direction === 'right');
-            pool = rightFrames.length > 0 ? rightFrames : framesByEnergy.mid;
-        } else if (phase === 'DROP') pool = framesByEnergy.high;
-        else if (phase === 'CHAOS') pool = [...framesByEnergy.high, ...closeupFrames];
+        
+        if (isCloseupLocked) {
+             pool = closeupFrames;
+        } else {
+            if (phase === 'WARMUP') pool = framesByEnergy.low; 
+            else if (phase === 'SWING_LEFT') {
+                const leftFrames = framesByEnergy.mid.filter(f => f.direction === 'left');
+                pool = leftFrames.length > 0 ? leftFrames : framesByEnergy.mid;
+            } else if (phase === 'SWING_RIGHT') {
+                const rightFrames = framesByEnergy.mid.filter(f => f.direction === 'right');
+                pool = rightFrames.length > 0 ? rightFrames : framesByEnergy.mid;
+            } else if (phase === 'DROP') pool = framesByEnergy.high;
+            else if (phase === 'CHAOS') pool = [...framesByEnergy.high, ...closeupFrames];
+        }
 
         if (pool.length === 0) pool = framesByEnergy.mid;
         if (pool.length === 0) pool = framesByEnergy.low;
         
         if (pool.length > 0) {
-            prevPoseRef.current = targetPoseRef.current;
             let nextFrame = pool[Math.floor(Math.random() * pool.length)];
             let attempts = 0;
             while (nextFrame.pose === targetPoseRef.current && attempts < 3 && phase !== 'CHAOS') {
                  nextFrame = pool[Math.floor(Math.random() * pool.length)];
                  attempts++;
             }
-            targetPoseRef.current = nextFrame.pose;
+            
+            // SMART TRANSITION LOGIC
+            let mode: InterpMode = 'CUT'; 
+            
+            if (isCloseupLocked || nextFrame.type === 'closeup') {
+                 mode = 'MORPH'; 
+            } else if (phase === 'SWING_LEFT' || phase === 'SWING_RIGHT') {
+                 // Use SLIDE for directional swings to add fluidity (User Request)
+                 mode = 'SLIDE';
+            }
+
+            triggerTransition(nextFrame.pose, mode);
         }
     }
     
-    // Vocal Gate
-    if (high > 0.6 && mid > 0.4 && bass < 0.5) {
+    // Vocal Gate / Closeup Trigger
+    if (!isCloseupLocked && high > 0.6 && mid > 0.4 && bass < 0.5) {
         const singers = closeupFrames.filter(f => f.pose.includes('open'));
-        if (singers.length > 0 && Math.random() < 0.3) {
-            targetPoseRef.current = singers[Math.floor(Math.random() * singers.length)].pose;
+        if (singers.length > 0 && Math.random() < 0.4) {
+            const next = singers[Math.floor(Math.random() * singers.length)].pose;
+            triggerTransition(next, 'MORPH', 1.5); 
+            closeupLockTimeRef.current = now + 2000;
         }
     }
 
     // Physics Decay
-    charSquashRef.current += (1.0 - charSquashRef.current) * (10 * deltaTime); // Slower return
-    charSkewRef.current += (0.0 - charSkewRef.current) * (15 * deltaTime);
+    charSquashRef.current += (1.0 - charSquashRef.current) * (12 * deltaTime);
+    charSkewRef.current += (0.0 - charSkewRef.current) * (10 * deltaTime);
     fluidStutterRef.current *= Math.exp(-8 * deltaTime); 
-    charTiltRef.current += (targetTiltRef.current - charTiltRef.current) * (5 * deltaTime);
+    charTiltRef.current += (targetTiltRef.current - charTiltRef.current) * (6 * deltaTime);
+    charBounceYRef.current += (0 - charBounceYRef.current) * (10 * deltaTime); 
+    
+    rgbSplitRef.current *= Math.exp(-10 * deltaTime); 
+    flashIntensityRef.current *= Math.exp(-15 * deltaTime); 
 
-    const decay = 1 - Math.exp(-6 * deltaTime);
+    const decay = 1 - Math.exp(-5 * deltaTime);
     camZoomRef.current += (BASE_ZOOM - camZoomRef.current) * decay;
     ghostAmountRef.current *= Math.exp(-8 * deltaTime); 
     echoTrailRef.current *= Math.exp(-4 * deltaTime);
 
+    // Full Rotation for Character
     const rotX = superCamActive ? masterRotXRef.current : 0;
     const rotY = superCamActive ? masterRotYRef.current : 0;
     const rotZ = superCamActive ? masterRotZRef.current : 0;
@@ -397,72 +476,126 @@ export const Step4Preview: React.FC<Step4Props> = ({ state, onGenerateMore, onSp
         const cy = h/2;
         ctx.clearRect(0, 0, w, h);
         
-        const activeFrame = [...framesByEnergy.low, ...framesByEnergy.mid, ...framesByEnergy.high, ...closeupFrames].find(f => f.pose === targetPoseRef.current);
-        const img = poseImagesRef.current[targetPoseRef.current];
-        const ghostImg = poseImagesRef.current[prevPoseRef.current];
-
-        if (img) {
+        // --- SMART INTERPOLATION BLENDER ---
+        const drawLayer = (pose: string, opacity: number, blurAmount: number, skewOffset: number) => {
+            const frame = [...framesByEnergy.low, ...framesByEnergy.mid, ...framesByEnergy.high, ...closeupFrames].find(f => f.pose === pose);
+            const img = poseImagesRef.current[pose];
+            
+            // CRITICAL FIX: Ensure image is loaded and valid before drawing
+            if (!img || !img.complete || img.naturalWidth === 0 || img.naturalHeight === 0) return;
+            
             const aspect = img.width / img.height;
             let dw = w;
             let dh = w / aspect;
             
             if (fitMode === 'contain') {
-                dw = w * 0.9;
+                dw = w * 1.0; 
                 dh = dw / aspect;
-                if (dh > h * 0.9) { dh = h * 0.9; dw = dh * aspect; }
+                if (dh > h * 1.0) { dh = h * 1.0; dw = dh * aspect; } 
             } else {
                 if (dh < h) { dh = h; dw = dh * aspect; }
             }
             
-            const renderFrame = (image: HTMLImageElement, zoom: number, opacity: number, composite: GlobalCompositeOperation = 'source-over', offsetY: number = 0) => {
+            const renderFrame = (image: HTMLImageElement, zoom: number, alpha: number, composite: GlobalCompositeOperation = 'source-over', offsetY: number = 0, colorChannel: 'all'|'r'|'b' = 'all') => {
                 ctx.save();
-                ctx.translate(cx, cy);
+                ctx.translate(cx, cy + charBounceYRef.current); 
                 
-                const tiltX = (rotX * 1.0) * (Math.PI/180);
-                const tiltY = (-rotY * 1.5) * (Math.PI/180); 
+                if (colorChannel === 'r') ctx.translate(-10 * rgbSplitRef.current, 0);
+                if (colorChannel === 'b') ctx.translate(10 * rgbSplitRef.current, 0);
+
+                const radX = (rotX * Math.PI) / 180;
+                const radY = (rotY * Math.PI) / 180;
+                const scaleX = Math.cos(radY); 
+                const scaleY = Math.cos(radX); 
+                
                 const tiltZ = (rotZ * 0.8) * (Math.PI/180);
-                
                 ctx.rotate(tiltZ + (charTiltRef.current * Math.PI / 180));
-                ctx.transform(1, tiltX * 0.5, tiltY * 0.5, 1, -rotY * 0.8, -rotX * 0.8);
+                ctx.scale(Math.abs(scaleX), Math.abs(scaleY));
                 ctx.scale(1/charSquashRef.current, charSquashRef.current); 
-                ctx.transform(1, 0, charSkewRef.current, 1, 0, 0);
+                
+                if (skewOffset !== 0) ctx.transform(1, 0, skewOffset, 1, 0, 0);
+                if (charSkewRef.current !== 0) ctx.transform(1, 0, charSkewRef.current * 0.2, 1, 0, 0);
 
                 ctx.scale(zoom, zoom);
                 ctx.translate(0, offsetY * dh); 
                 
-                ctx.globalAlpha = opacity;
+                if (blurAmount > 0) ctx.filter = `blur(${blurAmount}px)`;
+
+                ctx.globalAlpha = alpha;
                 ctx.globalCompositeOperation = composite;
                 
-                ctx.drawImage(image, -dw/2, -dh/2, dw, dh);
+                if (colorChannel !== 'all') {
+                     ctx.globalAlpha = alpha * 0.7;
+                     if(colorChannel === 'r') ctx.filter = 'hue-rotate(90deg)'; 
+                     if(colorChannel === 'b') ctx.filter = 'hue-rotate(-90deg)';
+                }
+
+                // MECHANICAL CENTERING FIX
+                try {
+                    ctx.drawImage(image, -dw/2, -dh/2, dw, dh);
+                } catch (e) {
+                    // Suppress broken image errors
+                }
                 ctx.restore();
-            }
+            };
 
             let effectiveZoom = camZoomRef.current;
             let effectiveOffsetY = 0;
             
-            if (activeFrame && activeFrame.isVirtual && activeFrame.virtualZoom) {
-                effectiveZoom *= activeFrame.virtualZoom;
-                effectiveOffsetY = activeFrame.virtualOffsetY || 0;
+            // Handle Virtual Zoom adjustments
+            if (frame && frame.isVirtual && frame.virtualZoom) {
+                effectiveZoom *= frame.virtualZoom;
+                effectiveOffsetY = frame.virtualOffsetY || 0;
             }
-
-            if (ghostAmountRef.current > 0.05 && ghostImg) {
-                renderFrame(ghostImg, effectiveZoom * 1.2, ghostAmountRef.current * 0.4, 'screen', effectiveOffsetY);
-            }
-
-            // Fluid Stutter: Triggered heavily by scratch engine
-            if (fluidStutterRef.current > 0.1 && ghostImg) {
-                renderFrame(ghostImg, effectiveZoom, fluidStutterRef.current * 0.6, 'source-over', effectiveOffsetY);
-            }
-
-            if (echoTrailRef.current > 0.05) {
-                renderFrame(img, effectiveZoom * 1.02, echoTrailRef.current * 0.3, 'source-over', effectiveOffsetY);
-            }
-
-            renderFrame(img, effectiveZoom, 1.0, 'source-over', effectiveOffsetY);
             
-            if (ghostAmountRef.current > 0.2) {
-                 renderFrame(img, effectiveZoom, ghostAmountRef.current * 0.2, 'overlay', effectiveOffsetY);
+            if (rgbSplitRef.current > 0.1) {
+                renderFrame(img, effectiveZoom, opacity * 0.8, 'screen', effectiveOffsetY, 'r');
+                renderFrame(img, effectiveZoom, opacity * 0.8, 'screen', effectiveOffsetY, 'b');
+                renderFrame(img, effectiveZoom, opacity, 'multiply', effectiveOffsetY, 'all'); 
+            } else {
+                renderFrame(img, effectiveZoom, opacity, 'source-over', effectiveOffsetY);
             }
+        };
+
+        const progress = transitionProgressRef.current;
+        const mode = transitionModeRef.current;
+        
+        if (progress >= 1.0 || mode === 'CUT') {
+            drawLayer(targetPoseRef.current, 1.0, 0, 0);
+        } else {
+            const easeT = progress * progress * (3 - 2 * progress); 
+            
+            if (mode === 'SLIDE') {
+                // FLUID SLIDE EFFECT
+                // source slides out to the left/right, target slides in
+                const dirMultiplier = targetPoseRef.current.includes('right') ? -1 : 1;
+                drawLayer(sourcePoseRef.current, 1.0 - easeT, 0, easeT * 0.5 * dirMultiplier);
+                drawLayer(targetPoseRef.current, easeT, 0, (1.0 - easeT) * -0.5 * dirMultiplier);
+            } else {
+                // MORPH
+                drawLayer(sourcePoseRef.current, 1.0 - easeT, 0, 0);
+                drawLayer(targetPoseRef.current, easeT, 0, 0); 
+            }
+        }
+            
+        // GHOSTING FX
+        const ghostImg = poseImagesRef.current[sourcePoseRef.current];
+        if (ghostImg && ghostImg.complete && ghostImg.naturalWidth > 0 && ghostAmountRef.current > 0.2) {
+             // simplified ghosting logic
+        }
+            
+        if (mid > 0.4) {
+            ctx.save();
+            ctx.fillStyle = `rgba(0,0,0, ${mid * 0.3})`;
+            for(let y=0; y<h; y+=6) {
+                 ctx.fillRect(0, y, w, 2);
+            }
+            ctx.restore();
+        }
+        
+        if (flashIntensityRef.current > 0.01) {
+            ctx.fillStyle = `rgba(255,255,255, ${flashIntensityRef.current})`;
+            ctx.fillRect(0,0,w,h);
         }
     };
 

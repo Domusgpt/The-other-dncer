@@ -1,10 +1,8 @@
 
-
 import { GoogleGenAI } from "@google/genai";
 import { GeneratedFrame, PoseType, EnergyLevel, SubjectCategory, FrameType, SheetRole, MoveDirection } from "../types";
 
 // Use environment variable as per strict guidelines. 
-// Fallback included only for local dev convenience if env is missing.
 const API_KEY = process.env.API_KEY || 'AIzaSyDFjSQY6Ne38gtzEd6Q_5zyyW65ah5_anw';
 
 // --- UTILITIES ---
@@ -26,7 +24,6 @@ const fileToBase64 = (file: File): Promise<string> => {
     });
 };
 
-// Optimized resize for Gemini 384px Input cost saving
 const resizeImage = (file: File, maxDim: number = 384): Promise<string> => {
     return new Promise((resolve, reject) => {
         if (!file || !(file instanceof File)) return reject(new Error("Invalid file passed to resizeImage"));
@@ -60,7 +57,6 @@ const resizeImage = (file: File, maxDim: number = 384): Promise<string> => {
                 }
                 
                 ctx.drawImage(img, 0, 0, width, height);
-                // Lower quality slightly to prevent Payload Too Large / XHR errors
                 const dataUrl = canvas.toDataURL('image/jpeg', 0.6); 
                 URL.revokeObjectURL(url);
                 resolve(dataUrl);
@@ -88,12 +84,15 @@ export const fileToGenericBase64 = async (file: File): Promise<string> => {
   }
 };
 
-// --- SPRITE SHEET SLICER (NORMALIZED 1024x1024) ---
+// --- SPRITE SHEET SLICER (MECHANICAL GRID FIX) ---
 const sliceSpriteSheet = (base64Image: string, rows: number, cols: number): Promise<string[]> => {
     return new Promise((resolve, reject) => {
         const img = new Image();
         img.onload = async () => {
-            // 1. STANDARDIZATION STEP
+            // 1. MECHANICAL ALIGNMENT
+            // We force the image into a 1024x1024 square.
+            // Even if the input is slightly rectangular, this 'stretches' the grid to align
+            // perfectly with our 25% cuts. This is more robust than cropping.
             const SHEET_SIZE = 1024;
             const normCanvas = document.createElement('canvas');
             normCanvas.width = SHEET_SIZE;
@@ -102,25 +101,16 @@ const sliceSpriteSheet = (base64Image: string, rows: number, cols: number): Prom
             
             if (!normCtx) { reject("Canvas context failed"); return; }
             
-            // SMART CROP LOGIC:
-            // Crop the CENTER SQUARE from the source image.
-            let srcX = 0, srcY = 0, srcW = img.width, srcH = img.height;
-            if (img.width !== img.height) {
-                const minDim = Math.min(img.width, img.height);
-                srcX = (img.width - minDim) / 2;
-                srcY = (img.height - minDim) / 2;
-                srcW = minDim;
-                srcH = minDim;
-            }
-            
-            // Draw cropped square scaled to 1024x1024
-            normCtx.drawImage(img, srcX, srcY, srcW, srcH, 0, 0, SHEET_SIZE, SHEET_SIZE);
+            // STRETCH TO FIT (Mechanical Solution)
+            normCtx.drawImage(img, 0, 0, img.width, img.height, 0, 0, SHEET_SIZE, SHEET_SIZE);
 
             // 2. SLICING STEP
             const cellW = SHEET_SIZE / cols; // 256
             const cellH = SHEET_SIZE / rows; // 256
             
-            // SAFETY CROP: Increased to 10% to aggressively remove cut-off limbs and grid lines
+            // CONSERVATIVE CROP:
+            // Only crop 10% to remove grid lines. 
+            // We rely on the prompt to keep the character centered.
             const cropFactor = 0.10; 
             const cropX = cellW * cropFactor;
             const cropY = cellH * cropFactor;
@@ -143,16 +133,16 @@ const sliceSpriteSheet = (base64Image: string, rows: number, cols: number): Prom
 
                         cellCtx.drawImage(
                             normCanvas, 
-                            cellSrcX, cellSrcY, sourceW, sourceH, // Source from Norm Canvas
+                            cellSrcX, cellSrcY, sourceW, sourceH, 
                             0, 0, cellCanvas.width, cellCanvas.height
                         );
                         
-                        // Convert to Blob URL (JPEG 0.8 for speed)
+                        // Convert to Blob URL
                         const p = new Promise<void>(resolveBlob => {
                             cellCanvas.toBlob(blob => {
                                 if (blob) frames.push(URL.createObjectURL(blob));
                                 resolveBlob();
-                            }, 'image/jpeg', 0.8);
+                            }, 'image/jpeg', 0.85);
                         });
                         promises.push(p);
                     }
@@ -167,7 +157,6 @@ const sliceSpriteSheet = (base64Image: string, rows: number, cols: number): Prom
     });
 };
 
-// --- MIRRORING UTILITY (Blob Optimized) ---
 const mirrorFrame = (frameUrl: string): Promise<string> => {
     return new Promise((resolve) => {
         const img = new Image();
@@ -192,7 +181,6 @@ const mirrorFrame = (frameUrl: string): Promise<string> => {
     });
 };
 
-// --- RETRY WRAPPER ---
 const generateWithRetry = async (ai: GoogleGenAI, params: any, retries = 3) => {
     let lastError: any;
     for (let i = 0; i < retries; i++) {
@@ -201,14 +189,12 @@ const generateWithRetry = async (ai: GoogleGenAI, params: any, retries = 3) => {
         } catch (e: any) {
             console.warn(`Gemini generation attempt ${i + 1} failed:`, e);
             lastError = e;
-            // Exponential backoff
             await delay(1000 * Math.pow(2, i)); 
         }
     }
     throw lastError;
 };
 
-// --- SINGLE SHEET GENERATOR (Atomic Unit) ---
 const generateSingleSheet = async (
     ai: GoogleGenAI,
     role: SheetRole,
@@ -216,138 +202,105 @@ const generateSingleSheet = async (
     stylePrompt: string,
     motionPrompt: string,
     category: SubjectCategory,
-    seed: number // CONSISTENCY LOCK
-): Promise<GeneratedFrame[]> => {
+    seed: number, 
+    contextImageBase64?: string
+): Promise<{ frames: GeneratedFrame[], rawSheetBase64?: string }> => {
     
     const rows = 4;
     const cols = 4;
     const isTextOrSymbol = category === 'TEXT' || category === 'SYMBOL';
-    const actionDesc = motionPrompt ? `Performing: ${motionPrompt}` : "";
+    
+    // Inject Motion Prompt explicitly so "Charleston" is respected
+    const danceStyle = motionPrompt ? `Specific Dance Style: ${motionPrompt}.` : "Style: Rhythmic, energetic dance loop.";
 
-    // PROMPT ENGINEERING: STRICT IDENTITY LOCK & GRID ALIGNMENT
-    let systemPrompt = `TASK: Generate a 4x4 Sprite Sheet (16 frames) based on the input image.
+    // MECHANICAL PROMPT: STRICT GRID & CENTERING
+    let systemPrompt = `TASK: Generate a strict 4x4 Grid Sprite Sheet (16 frames).
     
-    CRITICAL: IDENTITY LOCK.
-    You MUST preserve the EXACT face, hair, clothing, and body type from the input image.
-    All frames must look like the EXACT SAME character.
-    Do NOT generate a random person. 
-    Use the input image as the absolute ground truth.
+    MECHANICAL RULES:
+    1. GRID: Exactly 4 columns, 4 rows.
+    2. SPACING: Use the FULL CELL for each frame.
+    3. CENTERING: The character must be centered in the MIDDLE of each grid cell.
+    4. PADDING: Leave a small gap between the character and the cell edge to prevent clipping.
+    5. IDENTITY: Maintain exact character consistency from Input Image.
     
-    GRID SPECIFICATION (CRITICAL FOR SLICING):
-    1. Strictly 4 rows, 4 columns. 
-    2. Output must be a PERFECT SQUARE image.
-    3. ZERO PADDING between cells. Frames must be edge-to-edge.
-    4. SAFETY MARGIN: Keep the character SCALED TO 80% within each cell to ensure NO LIMBS ARE CUT OFF.
-       - The head, feet, and hands MUST NOT touch the grid lines.
-       - Center the character in every cell.
-    
-    Style Hint: ${stylePrompt} (Use for lighting/mood ONLY. Do NOT change subject appearance).
+    Visual Style: ${stylePrompt}
+    ${danceStyle}
     `;
 
-    // --- BRANCHING LOGIC BASED ON SUBJECT TYPE ---
-    
     if (isTextOrSymbol) {
-        // === LOGO / TEXT PATH ===
-        const userAction = motionPrompt ? `Action: ${motionPrompt}` : "Action: Dynamic Pulsing";
-        
-        if (role === 'base') {
-            systemPrompt += `
-            SUBJECT: LOGO/TEXT/SYMBOL (Kinetic Typography).
-            ${userAction}.
-            Row 1: 3D Extrusion / Pulse (Forward/Back)
-            Row 2: Rotation Left (Y-Axis Spin)
-            Row 3: Rotation Right (Y-Axis Spin)
-            Row 4: Heavy Impact / Scale Up
-            Focus: Bold lines, 3D depth, metallic sheen.
-            `;
-        } else if (role === 'alt') {
-            systemPrompt += `
-            SUBJECT: LOGO/TEXT/SYMBOL (Variations).
-            Row 1: Vertical Flip / Tumble
-            Row 2: Squash and Stretch (Elastic Physics)
-            Row 3: Liquid Melt / Chrome Reflection
-            Row 4: Diagonal Tilt / Shear
-            Focus: Elasticity, Material properties.
-            `;
-        } else if (role === 'flourish') {
-            systemPrompt += `
-            SUBJECT: LOGO/TEXT/SYMBOL (Glitch/FX).
-            Row 1: ZERO-POINT ANCHOR (Clean, Static, Centered)
-            Row 2: Fragment / Explode outward (Debris)
-            Row 3: RGB Split / Chromatic Aberration (Glitch)
-            Row 4: Neon Glow Surge / Over-exposure
-            Focus: High energy visual effects.
-            `;
-        }
-
+         systemPrompt += `
+         SUBJECT: TEXT/LOGO.
+         Action: Dynamic Motion/Pulsing.
+         Keep content centered in each cell.
+         `;
     } else {
-        // === CHARACTER PATH ===
-        const userStyle = motionPrompt ? `Dance Style: ${motionPrompt}` : "Dance Style: Rhythmic Groove";
-
         if (role === 'base') {
             systemPrompt += `
-            SUBJECT: CHARACTER (Base Rhythm) - KEEP IDENTITY.
-            ${userStyle}.
-            Row 1: Idle Groove (Center). Grounded. Micro-movements, breathing, slight weight shift.
-            Row 2: Step Left / Lean Left. Character physically moves to their LEFT.
-            Row 3: Step Right / Lean Right. Character physically moves to their RIGHT.
-            Row 4: Power Pose / Freeze (Center). Strong silhouette, arms defined.
-            Focus: Stability, Rhythm, Center-weighted. Ensure feet are visible.
+            SHEET 1 (BASE LOOP):
+            Row 1: Idle / Groove (Center) - Establishing the character.
+            Row 2: ${motionPrompt ? 'Signature Move Part A' : 'Step Left'} - ${danceStyle}
+            Row 3: ${motionPrompt ? 'Signature Move Part B' : 'Step Right'} - ${danceStyle}
+            Row 4: Power Pose / Freeze Frame
+            Ensure feet are visible. Center of mass in middle of cell.
             `;
         } else if (role === 'alt') {
+            // ALT IS NOW "BASE EXTENSION" - MORE MOVES
             systemPrompt += `
-            SUBJECT: CHARACTER (Dynamic Moves) - KEEP IDENTITY.
-            Row 1: JUMP / Air Pose. Character mid-air, knees tucked or legs extended.
-            Row 2: Floor Work / Crouch. Character drops low, hand on floor or kneeling.
-            Row 3: Spin Initiation. Character turning, body twisted, dynamic fabric motion.
-            Row 4: Dynamic Side Lean / Off-balance. Extreme angle, energetic.
-            Focus: Athletics, Fluidity, Alternative Angles.
+            SHEET 2 (VARIATIONS):
+            Generate 16 NEW frames extending the dance.
+            Row 1: Dynamic Jump or Hop
+            Row 2: Low movement / Crouch / Floor work
+            Row 3: Spin / Rotation frames
+            Row 4: Expressive Extension / Kick
+            Keep action contained within cell boundaries.
+            MUST MATCH CHARACTER FROM SHEET 1 EXACTLY.
             `;
         } else if (role === 'flourish') {
             systemPrompt += `
-            SUBJECT: CHARACTER (Special FX & Lip Sync) - KEEP IDENTITY.
-            Row 1: Hand Tutting / shapes. Complex arm movements, framing the body.
-            Row 2: Stutter / Glitch Pose. Sharp, angular, high-tension pose.
-            Row 3: MACRO FACE (Neutral). Extreme Close-up on face (neck up). Mouth CLOSED or Neutral.
-            Row 4: MACRO FACE (Singing). Extreme Close-up on face (neck up). Mouth WIDE OPEN singing/shouting.
-            Focus: Facial expressions, Lip sync capability, High Energy.
+            SHEET 3 (DETAILS & FX):
+            Row 1: Hand Movements / Gestures
+            Row 2: Fast Motion Blur / Smears
+            Row 3: Face Closeup (Neutral)
+            Row 4: Face Closeup (Expressive/Singing)
             `;
+        } else if (role === 'smooth') {
+             systemPrompt += `
+             SHEET 4 (INTERPOLATION):
+             Generate in-between poses that connect the previous movements.
+             Focus on smooth transitions and weight shifting.
+             `;
         }
     }
 
     console.log(`[Gemini] Generating Sheet: ${role} (${category})...`);
 
-    // Ensure we strip the Data URL prefix if it exists, API expects pure base64
     const cleanBase64 = imageBase64.includes('base64,') ? imageBase64.split('base64,')[1] : imageBase64;
+    const cleanContext = contextImageBase64 && contextImageBase64.includes('base64,') ? contextImageBase64.split('base64,')[1] : contextImageBase64;
+
+    const parts: any[] = [
+        { inlineData: { mimeType: 'image/jpeg', data: cleanBase64 } }
+    ];
+
+    if (cleanContext) {
+        parts.push({ inlineData: { mimeType: 'image/jpeg', data: cleanContext } });
+        systemPrompt += "\nREFERENCE: Use the second image (previous sprite sheet) as the MASTER REFERENCE for spatial alignment and character consistency.";
+    }
+
+    parts.push({ text: systemPrompt });
 
     try {
         const response = await generateWithRetry(ai, {
             model: 'gemini-2.5-flash-image',
-            contents: {
-                parts: [
-                    { 
-                        inlineData: { 
-                            mimeType: 'image/jpeg', 
-                            data: cleanBase64
-                        } 
-                    },
-                    { text: systemPrompt }
-                ]
-            },
+            contents: { parts },
             config: {
                 imageConfig: { aspectRatio: "1:1" },
-                seed: seed // USE THE SAME SEED FOR CONSISTENCY
+                seed: seed
             }
         });
 
         const candidate = response.candidates?.[0];
         if (!candidate) throw new Error("API returned no candidates.");
         
-        // Log Safety and Finish Reason for debugging
-        if (candidate.finishReason !== 'STOP') {
-            console.warn(`[Gemini] Sheet ${role} finish reason: ${candidate.finishReason}. Check safety settings.`);
-        }
-
         let spriteSheetBase64: string | undefined = undefined;
         if (candidate.content && candidate.content.parts) {
             for (const part of candidate.content.parts) {
@@ -359,15 +312,13 @@ const generateSingleSheet = async (
         }
 
         if (!spriteSheetBase64) {
-             console.warn(`[Gemini] Sheet ${role} yielded no image data. Full candidate:`, candidate);
-             return [];
+             console.warn(`[Gemini] Sheet ${role} yielded no image data.`);
+             return { frames: [] };
         }
 
-        // Slice (Normalized to 1024x1024)
         const rawFrames = await sliceSpriteSheet(`data:image/jpeg;base64,${spriteSheetBase64}`, rows, cols);
         const finalFrames: GeneratedFrame[] = [];
 
-        // Map
         for (let i = 0; i < rawFrames.length; i++) {
             let energy: EnergyLevel = 'mid';
             let type: FrameType = 'body';
@@ -375,58 +326,19 @@ const generateSingleSheet = async (
             let poseName = `${role}_${i}`;
 
             if (role === 'base') {
-                if (i < 4) {
-                    energy = 'low'; // Row 1: Idle (Center)
-                    direction = 'center';
-                }
-                else if (i >= 4 && i < 8) {
-                    energy = 'mid'; // Row 2: Left
-                    direction = 'left';
-                }
-                else if (i >= 8 && i < 12) {
-                    energy = 'mid'; // Row 3: Right
-                    direction = 'right';
-                }
-                else if (i >= 12) {
-                    energy = 'high'; // Row 4: Power Pose (Center)
-                    direction = 'center';
-                }
+                if (i < 4) { energy = 'low'; direction = 'center'; }
+                else if (i >= 4 && i < 8) { energy = 'mid'; direction = 'left'; }
+                else if (i >= 8 && i < 12) { energy = 'mid'; direction = 'right'; }
+                else if (i >= 12) { energy = 'high'; direction = 'center'; }
             } 
             else if (role === 'alt') {
-                energy = 'high'; // Alt is generally higher energy now
-                if (i < 4) { poseName += '_jump'; direction = 'center'; } // Row 1: Jump
-                else if (i >= 4 && i < 8) { poseName += '_floor'; direction = 'center'; } // Row 2: Floor
-                else { direction = 'center'; } // Spins
+                energy = 'high';
+                if (i < 4) direction = 'center'; 
+                else if (i >= 4 && i < 8) direction = 'center'; 
             }
             else if (role === 'flourish') {
-                // FLOURISH MAPPING
                 energy = 'high';
-                direction = 'center';
-                if (!isTextOrSymbol) {
-                    if (i < 4) {
-                        // Row 1: Hands
-                        poseName = `flourish_hands_${i}`;
-                        energy = 'mid';
-                    } else if (i >= 4 && i < 8) {
-                        // Row 2: Stutter
-                        poseName = `flourish_stutter_${i}`;
-                        energy = 'high';
-                    } else if (i >= 8 && i < 12) {
-                        // Row 3: Closeup Neutral
-                        poseName = `closeup_neutral_${i}`;
-                        type = 'closeup';
-                        energy = 'mid';
-                    } else if (i >= 12) {
-                        // Row 4: Closeup Open (Lip Sync)
-                        poseName = `closeup_open_${i}`;
-                        type = 'closeup';
-                        energy = 'high';
-                    }
-                } else {
-                    // Text flourish logic
-                    if (i < 4) energy = 'low'; // Anchor
-                    else energy = 'high';
-                }
+                if (i >= 8) type = 'closeup';
             }
 
             finalFrames.push({
@@ -439,12 +351,10 @@ const generateSingleSheet = async (
             });
             
             // Mirror logic 
-            // We want to create "Fake Right" from "Real Left" and vice versa for max coverage
             const shouldMirror = !isTextOrSymbol && type === 'body' && role !== 'flourish';
             
             if (shouldMirror) {
                  const mirrored = await mirrorFrame(rawFrames[i]);
-                 // Swap direction for the mirror
                  let mirrorDir: MoveDirection = direction;
                  if (direction === 'left') mirrorDir = 'right';
                  else if (direction === 'right') mirrorDir = 'left';
@@ -460,80 +370,89 @@ const generateSingleSheet = async (
             }
         }
         
-        return finalFrames;
+        return { frames: finalFrames, rawSheetBase64: spriteSheetBase64 };
 
     } catch (e: any) {
         console.error(`Failed to generate sheet ${role}:`, e);
-        // Don't kill whole process if one sheet fails
-        return [];
+        return { frames: [] };
     }
 };
 
-
-// --- MAIN GENERATION ORCHESTRATOR (STREAMING) ---
 export const generateDanceFrames = async (
   imageBase64: string,
   stylePrompt: string,
   motionPrompt: string,
   useTurbo: boolean,
   superMode: boolean,
-  onFrameUpdate: (frames: GeneratedFrame[]) => void // NEW CALLBACK
+  onFrameUpdate: (frames: GeneratedFrame[]) => void 
 ): Promise<{ frames: GeneratedFrame[], category: SubjectCategory }> => {
 
   const ai = new GoogleGenAI({ apiKey: API_KEY });
   
-  // GENERATE A MASTER SEED FOR CONSISTENCY
-  // All parallel requests will use this same seed.
   const masterSeed = Math.floor(Math.random() * 2147483647);
   console.log("Master Seed for Consistency:", masterSeed);
 
-  // In a real app, we might use a small vision call to detect category first.
-  // For now, default to CHARACTER unless prompt suggests otherwise.
   let category: SubjectCategory = 'CHARACTER';
   if (/logo|text|word|letter|font|typography/i.test(motionPrompt)) category = 'TEXT';
   
-  // We will accumulate frames here and emit updates
   let allFrames: GeneratedFrame[] = [];
+  let baseSheetBase64: string | undefined = undefined;
 
-  // 1. Launch BASE Sheet IMMEDIATELY
-  const basePromise = generateSingleSheet(ai, 'base', imageBase64, stylePrompt, motionPrompt, category, masterSeed)
-    .then(frames => {
-        allFrames = [...allFrames, ...frames];
-        onFrameUpdate(allFrames); // EMIT IMMEDIATELY
-        return frames;
-    });
+  // 1. GENERATE BASE (The Foundation)
+  const baseResult = await generateSingleSheet(ai, 'base', imageBase64, stylePrompt, motionPrompt, category, masterSeed);
+  
+  if (baseResult.frames.length > 0) {
+      allFrames = [...allFrames, ...baseResult.frames];
+      onFrameUpdate(allFrames); // FAST UI UPDATE
+      baseSheetBase64 = baseResult.rawSheetBase64; 
+  } else {
+      throw new Error("Base generation failed. Aborting.");
+  }
 
-  // 2. Launch ALT Sheet (Non-blocking, parallel but staggered)
+  // 2. GENERATE EXTENSIONS (Using Base as Reference)
+  // We pass baseSheetBase64 as 'contextImage' to ensure style/pose consistency
   const altPromise = (async () => {
      if (!useTurbo || superMode) {
-         // Reduced staggering for faster perceived speed
-         await delay(200); 
+         await delay(100); 
          try {
-             const frames = await generateSingleSheet(ai, 'alt', imageBase64, stylePrompt, motionPrompt, category, masterSeed);
-             allFrames = [...allFrames, ...frames];
-             onFrameUpdate(allFrames); // EMIT UPDATE
-             return frames;
-         } catch(e) { console.warn("Alt sheet failed", e); return []; }
+             // Alt is now Base-Extension
+             const result = await generateSingleSheet(ai, 'alt', imageBase64, stylePrompt, motionPrompt, category, masterSeed, baseSheetBase64);
+             if(result.frames.length > 0) {
+                 allFrames = [...allFrames, ...result.frames];
+                 onFrameUpdate(allFrames);
+             }
+         } catch(e) { console.warn("Alt sheet failed", e); }
      }
-     return [];
   })();
 
-  // 3. Launch FLOURISH Sheet
   const flourishPromise = (async () => {
       if (superMode) {
-          await delay(400); // Reduced stagger
+          await delay(200); 
           try {
-              const frames = await generateSingleSheet(ai, 'flourish', imageBase64, stylePrompt, motionPrompt, category, masterSeed);
-              allFrames = [...allFrames, ...frames];
-              onFrameUpdate(allFrames); // EMIT UPDATE
-              return frames;
-          } catch(e) { console.warn("Flourish sheet failed", e); return []; }
+              const result = await generateSingleSheet(ai, 'flourish', imageBase64, stylePrompt, motionPrompt, category, masterSeed, baseSheetBase64);
+              if(result.frames.length > 0) {
+                  allFrames = [...allFrames, ...result.frames];
+                  onFrameUpdate(allFrames);
+              }
+          } catch(e) { console.warn("Flourish sheet failed", e); }
       }
-      return [];
   })();
 
-  // Wait for all to finish (or fail) before final return
-  await Promise.allSettled([basePromise, altPromise, flourishPromise]);
+  const smoothPromise = (async () => {
+      if (superMode) {
+          await delay(300); 
+          try {
+              // Smooth frames also use base reference
+              const result = await generateSingleSheet(ai, 'smooth', imageBase64, stylePrompt, motionPrompt, category, masterSeed, baseSheetBase64);
+              if(result.frames.length > 0) {
+                  allFrames = [...allFrames, ...result.frames];
+                  onFrameUpdate(allFrames);
+              }
+          } catch(e) { console.warn("Smooth sheet failed", e); }
+      }
+  })();
+
+  await Promise.allSettled([altPromise, flourishPromise, smoothPromise]);
 
   if (allFrames.length === 0) {
       throw new Error("Generation failed: No frames produced.");
