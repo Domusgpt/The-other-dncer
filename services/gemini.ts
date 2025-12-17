@@ -244,19 +244,38 @@ const generateSingleSheet = async (
     // Inject Motion Prompt explicitly so "Charleston" is respected
     const danceStyle = motionPrompt ? `Specific Dance Style: ${motionPrompt}.` : "Style: Rhythmic, energetic dance loop.";
 
-    // MECHANICAL PROMPT: STRICT GRID & CENTERING
+    // MECHANICAL PROMPT: STRICT GRID & CENTERING WITH VISUAL SPECS
     let systemPrompt = `TASK: Generate a strict 4x4 Grid Sprite Sheet (16 frames).
-    
-    MECHANICAL RULES:
-    1. GRID: Exactly 4 columns, 4 rows.
-    2. SPACING: Use the FULL CELL for each frame.
-    3. CENTERING: The character must be centered in the MIDDLE of each grid cell.
-    4. PADDING: Leave a small gap between the character and the cell edge to prevent clipping.
-    5. IDENTITY: Maintain exact character consistency from Input Image.
-    
-    Visual Style: ${stylePrompt}
-    ${danceStyle}
-    `;
+
+═══════════════════════════════════════════════════════════════════
+OUTPUT SPECIFICATION
+═══════════════════════════════════════════════════════════════════
+• OUTPUT: 1024×1024px image containing 4×4 grid (16 cells, 256×256px each)
+• QUALITY: Clean, consistent animation frames
+
+GRID LAYOUT (Reading Order: Left→Right, Top→Bottom):
+┌─────────┬─────────┬─────────┬─────────┐
+│ Frame 0 │ Frame 1 │ Frame 2 │ Frame 3 │  ← Row 1
+├─────────┼─────────┼─────────┼─────────┤
+│ Frame 4 │ Frame 5 │ Frame 6 │ Frame 7 │  ← Row 2
+├─────────┼─────────┼─────────┼─────────┤
+│ Frame 8 │ Frame 9 │Frame 10 │Frame 11 │  ← Row 3
+├─────────┼─────────┼─────────┼─────────┤
+│Frame 12 │Frame 13 │Frame 14 │Frame 15 │  ← Row 4
+└─────────┴─────────┴─────────┴─────────┘
+
+MECHANICAL RULES (CRITICAL):
+1. GRID: Exactly 4 columns × 4 rows = 16 frames total
+2. CELL SIZE: Each frame occupies exactly 256×256px
+3. CENTERING: Character centered in MIDDLE of each cell
+4. SCALE: Character fills 80% of cell height, consistent across all frames
+5. PADDING: Small gap between character and cell edge (no clipping)
+6. IDENTITY: Maintain EXACT character consistency from Input Image
+7. BACKGROUND: Consistent background across all frames
+
+Visual Style: ${stylePrompt}
+${danceStyle}
+`;
 
     if (isTextOrSymbol) {
          systemPrompt += `
@@ -518,106 +537,210 @@ const constructOrbitalPrompt = (
 
 SUBJECT: ${productName}
 
+═══════════════════════════════════════════════════════════════════
+OUTPUT SPECIFICATION
+═══════════════════════════════════════════════════════════════════
+• OUTPUT: 1024×1024px image containing 4×4 grid (16 cells, 256×256px each)
+• QUALITY: Product photography style - sharp focus, professional presentation
+
 MECHANICAL RULES (CRITICAL):
-1. GRID: Exactly 4 columns, 4 rows (16 frames total).
-2. LIGHTING: Maintain CONSTANT lighting environment across ALL frames. Light source must not shift.
-3. SCALE: Object must maintain EXACT same volumetric scale across all frames. No size changes.
-4. CENTERING: Product axis of rotation must be perfectly vertical and centered X.
-5. BACKGROUND: Pure white or transparent background. No shadows that would break compositing.
-6. QUALITY: Product photography style - sharp focus, professional presentation.
+1. GRID: Exactly 4 columns × 4 rows = 16 frames total
+2. CELL SIZE: Each frame occupies exactly 256×256px
+3. LIGHTING: CONSTANT soft-box lighting across ALL frames (no shadows)
+4. SCALE: Object fills 80% of each cell, perfectly centered
+5. BACKGROUND: Pure white (#FFFFFF) - NO gradients, NO shadows
+6. CAMERA: Fixed position, eye-level, equal distance from subject
 
 `;
 
   if (role === 'orbital') {
-    // Primary Y-axis rotation sheet (0° to 90°)
-    prompt += `SHEET TYPE: Y-AXIS ROTATION (The Cardinal Spin)
+    // Primary Y-axis rotation sheet - FULL 360° revolution
+    prompt += `═══════════════════════════════════════════════════════════════════
+ROTATION SEQUENCE (Reading Order: Left→Right, Top→Bottom)
+═══════════════════════════════════════════════════════════════════
+You are generating 16 frames showing ONE COMPLETE REVOLUTION (360°)
+of the subject rotating on its vertical axis. Each frame is viewed
+from a FIXED camera position at EQUAL distance.
 
-ROW 1 (Primary Rotation Quadrant):
-- Frame 0: FRONT VIEW (0 degrees) - Hero shot, full product visibility
-- Frame 1: FRONT-RIGHT (22.5 degrees) - Slight rotation, maintain full visibility
-- Frame 2: FRONT-RIGHT (45 degrees) - Quarter turn, showing side profile emerging
-- Frame 3: FRONT-RIGHT (67.5 degrees) - Three-quarter view
+GRID LAYOUT WITH ANGLES:
+┌─────────┬─────────┬─────────┬─────────┐
+│   0°    │   22°   │   45°   │   67°   │  ← Row 1
+│ (FRONT) │         │         │         │
+├─────────┼─────────┼─────────┼─────────┤
+│   90°   │  112°   │  135°   │  157°   │  ← Row 2
+│ (RIGHT) │         │         │         │
+├─────────┼─────────┼─────────┼─────────┤
+│  180°   │  202°   │  225°   │  247°   │  ← Row 3
+│ (BACK)  │         │         │         │
+├─────────┼─────────┼─────────┼─────────┤
+│  270°   │  292°   │  315°   │  337°   │  ← Row 4
+│ (LEFT)  │         │         │         │
+└─────────┴─────────┴─────────┴─────────┘
 
-ROW 2 (Completing First Quadrant):
-- Frame 4: RIGHT PROFILE (90 degrees) - Perfect side view
-- Frame 5: Additional 90° angle variant (slightly different)
-- Frame 6: RIGHT-BACK (112.5 degrees) - Transitioning to back
-- Frame 7: RIGHT-BACK (135 degrees) - Back corner visible
+═══════════════════════════════════════════════════════════════════
+INPUT IMAGE REFERENCE
+═══════════════════════════════════════════════════════════════════
+The input image(s) provided are reference views of the subject:
 
-ROW 3 (Back Quadrant - Optional, can be mirrored from front):
-- Frame 8: BACK-RIGHT (157.5 degrees)
-- Frame 9: BACK (180 degrees) - Direct back view
-- Frame 10: BACK-LEFT (202.5 degrees)
-- Frame 11: BACK-LEFT (225 degrees)
+        FRONT (0°)                    BACK (180°)
+      ┌───────────┐                 ┌───────────┐
+      │           │                 │           │
+      │    ◉      │  ←─── 180° ───→ │      ◉    │
+      │   /|\\     │    rotation     │     /|\\   │
+      │   / \\     │                 │     / \\   │
+      └───────────┘                 └───────────┘
+           ↑                              ↑
+      Input Image 1               Input Image 2
+      (if provided)               (if provided)
 
-ROW 4 (Return Quadrant - Mirror optimization):
-- Frame 12-15: Use for critical angles or leave as variations of above
+• 0° = FRONT VIEW (facing camera directly)
+• 90° = RIGHT SIDE (subject's right shoulder toward camera)
+• 180° = BACK VIEW (back of subject facing camera)
+• 270° = LEFT SIDE (subject's left shoulder toward camera)
 
-IMPORTANT: We only NEED frames 0-4 (0° to 90°). Frames 5-15 can be variations or the system will mirror 0-90° to complete 270-360°.
+FRAME-BY-FRAME BREAKDOWN:
+Row 1: Front Quarter (0° → 67°)
+  • Frame 0:  0° - FRONT (Hero shot, full frontal view)
+  • Frame 1:  22° - Slight turn right, front still dominant
+  • Frame 2:  45° - Quarter turn, showing right side emerging
+  • Frame 3:  67° - Three-quarter view, right side prominent
+
+Row 2: Right Quarter (90° → 157°)
+  • Frame 4:  90° - RIGHT PROFILE (perfect side view)
+  • Frame 5:  112° - Right-back transition
+  • Frame 6:  135° - Back corner becoming visible
+  • Frame 7:  157° - Back almost fully visible
+
+Row 3: Back Quarter (180° → 247°)
+  • Frame 8:  180° - BACK (direct rear view)
+  • Frame 9:  202° - Slight turn showing left side
+  • Frame 10: 225° - Back-left corner view
+  • Frame 11: 247° - Left side emerging
+
+Row 4: Left Quarter (270° → 337°)
+  • Frame 12: 270° - LEFT PROFILE (perfect side view)
+  • Frame 13: 292° - Left-front transition
+  • Frame 14: 315° - Front corner becoming visible
+  • Frame 15: 337° - Nearly back to front view
+
+CRITICAL: Each frame shows the SAME subject from a different angle
+as if the subject is on a turntable rotating clockwise when viewed
+from above. The camera NEVER moves - only the subject rotates.
 `;
   } else if (role === 'orbital_pitch') {
     // Elevation/pitch views
-    prompt += `SHEET TYPE: PITCH/ELEVATION VIEWS (The Inspection Angles)
+    prompt += `═══════════════════════════════════════════════════════════════════
+PITCH/ELEVATION VIEWS (The Inspection Angles)
+═══════════════════════════════════════════════════════════════════
+Generate 16 frames showing the subject from various vertical angles.
 
-ROW 1 (Elevated Views - Looking Down):
-- Frame 0: LEVEL (0° pitch) - Eye-level, standard view
-- Frame 1: TOP-DOWN 15° - Slight downward angle
-- Frame 2: TOP-DOWN 30° - Moderate elevation
-- Frame 3: TOP-DOWN 45° - Strong overhead angle
+GRID LAYOUT WITH PITCH ANGLES:
+┌─────────┬─────────┬─────────┬─────────┐
+│  0° EL  │  15° DN │  30° DN │  45° DN │  ← Row 1 (Looking Down)
+│ (LEVEL) │         │         │         │
+├─────────┼─────────┼─────────┼─────────┤
+│  60° DN │  90° DN │  15° UP │  30° UP │  ← Row 2 (Extreme Angles)
+│         │ (TOP)   │         │         │
+├─────────┼─────────┼─────────┼─────────┤
+│ FRONT@  │ FRONT@  │ FRONT@  │ FRONT@  │  ← Row 3 (Front View + Pitch)
+│ 0° EL   │ 30° DN  │ 60° DN  │ 30° UP  │
+├─────────┼─────────┼─────────┼─────────┤
+│ SIDE@   │ SIDE@   │ SIDE@   │ SIDE@   │  ← Row 4 (Side View + Pitch)
+│ 0° EL   │ 30° DN  │ 60° DN  │ 30° UP  │
+└─────────┴─────────┴─────────┴─────────┘
 
-ROW 2 (Extreme & Low Angles):
-- Frame 4: TOP-DOWN 60° - Nearly overhead
-- Frame 5: TOP-DOWN 90° - Plan view (bird's eye)
-- Frame 6: BOTTOM-UP 15° - Heroic low angle
-- Frame 7: BOTTOM-UP 30° - Strong upward perspective
+ELEVATION DIAGRAM:
+                    90° DOWN (Bird's Eye)
+                          ↑
+                    ┌─────┴─────┐
+                    │   TOP     │
+              45°   │           │
+                ↘   │           │
+          0° ───────┤  SUBJECT  ├─────── 0° (Eye Level)
+                ↗   │           │
+              45°   │           │
+                    │  BOTTOM   │
+                    └─────┬─────┘
+                          ↓
+                    90° UP (Worm's Eye)
 
-ROW 3-4: Combine rotation + pitch (0° front at various pitches, 90° side at various pitches)
+DN = Looking Down (camera above subject)
+UP = Looking Up (camera below subject)
+EL = Elevation angle from eye-level
 `;
   } else if (role === 'orbital_states') {
     // Functional states
-    prompt += `SHEET TYPE: FUNCTIONAL STATES (Product Configurations)
+    prompt += `═══════════════════════════════════════════════════════════════════
+FUNCTIONAL STATES (Product Configurations)
+═══════════════════════════════════════════════════════════════════
+Generate 16 frames showing the subject in various functional states.
 
-ROW 1 (Primary States):
-- Frame 0: CLOSED/INACTIVE state - Default product appearance
-- Frame 1: OPEN/ACTIVE state - Product in use position
-- Frame 2: TRANSITIONAL - Between open and closed
-- Frame 3: ALTERNATE CONFIG - Different usage mode
+GRID LAYOUT WITH STATES:
+┌─────────┬─────────┬─────────┬─────────┐
+│ CLOSED  │  OPEN   │ TRANSIT │  ALT    │  ← Row 1 (Primary States)
+│(Default)│(Active) │(Between)│ (Mode)  │
+├─────────┼─────────┼─────────┼─────────┤
+│EXPLODED │ASSEMBLED│PACKAGED │UNBOXING │  ← Row 2 (Detail States)
+│         │         │         │         │
+├─────────┼─────────┼─────────┼─────────┤
+│ IN-HAND │ON-SURF  │W/ACCESS │ STYLED  │  ← Row 3 (Lifestyle)
+│         │         │         │         │
+├─────────┼─────────┼─────────┼─────────┤
+│VARIANT 1│VARIANT 2│VARIANT 3│VARIANT 4│  ← Row 4 (Color/Size Variants)
+└─────────┴─────────┴─────────┴─────────┘
 
-ROW 2 (Detail States):
-- Frame 4: EXPLODED VIEW - Components separated (if applicable)
-- Frame 5: ASSEMBLED VIEW - All parts connected
-- Frame 6: PACKAGING VIEW - Product in box/packaging
-- Frame 7: UNBOXING VIEW - Partially revealed from packaging
+FRAME BREAKDOWN:
+Row 1 (Primary States):
+  • Frame 0:  CLOSED/INACTIVE - Default product appearance
+  • Frame 1:  OPEN/ACTIVE - Product in use position
+  • Frame 2:  TRANSITIONAL - Between open and closed
+  • Frame 3:  ALTERNATE CONFIG - Different usage mode
 
-ROW 3 (Lifestyle/Context):
-- Frame 8: IN-HAND - Human hand holding product (if applicable)
-- Frame 9: ON-SURFACE - Product on clean surface
-- Frame 10: WITH-ACCESSORY - Product with common companion item
-- Frame 11: STYLED - Lifestyle/marketing composition
+Row 2 (Detail States):
+  • Frame 4:  EXPLODED VIEW - Components separated
+  • Frame 5:  ASSEMBLED VIEW - All parts connected
+  • Frame 6:  PACKAGING VIEW - Product in box/packaging
+  • Frame 7:  UNBOXING VIEW - Partially revealed
 
-ROW 4 (Variants):
-- Frame 12-15: Color variants, size variants, or additional configurations
+Row 3 (Lifestyle/Context):
+  • Frame 8:  IN-HAND - Human hand holding product
+  • Frame 9:  ON-SURFACE - Product on clean surface
+  • Frame 10: WITH-ACCESSORY - With companion item
+  • Frame 11: STYLED - Lifestyle/marketing composition
+
+Row 4 (Variants):
+  • Frame 12-15: Color/size variants or additional configurations
 `;
   } else if (role === 'orbital_macro') {
     // Macro/detail shots
     const regions = macroRegions?.join(', ') || 'texture, logo, key features, material';
-    prompt += `SHEET TYPE: MACRO DETAIL VIEWS (Virtual Macro Lens)
+    prompt += `═══════════════════════════════════════════════════════════════════
+MACRO DETAIL VIEWS (Virtual Macro Lens)
+═══════════════════════════════════════════════════════════════════
+Generate 16 extreme close-up frames showing fine details.
 
 FOCUS REGIONS: ${regions}
 
-ROW 1 (Primary Details):
-- Frame 0: TEXTURE CLOSEUP - Material grain/surface quality at high magnification
-- Frame 1: LOGO/BRANDING - Brand mark, labels, or engravings
-- Frame 2: KEY FEATURE 1 - Primary functional element (button, dial, port)
-- Frame 3: KEY FEATURE 2 - Secondary functional element
+GRID LAYOUT WITH DETAIL TYPES:
+┌─────────┬─────────┬─────────┬─────────┐
+│ TEXTURE │  LOGO   │FEATURE 1│FEATURE 2│  ← Row 1 (Primary Details)
+│(Surface)│(Brand)  │(Button) │(Port)   │
+├─────────┼─────────┼─────────┼─────────┤
+│STITCHING│HARDWARE │ INNER   │  EDGE   │  ← Row 2 (Craftsmanship)
+│ (Seams) │(Metal)  │(Lining) │(Corners)│
+├─────────┼─────────┼─────────┼─────────┤
+│TEXTURE  │ LOGO    │FEATURE 1│FEATURE 2│  ← Row 3 (Alt Angles)
+│  @45°   │  @45°   │  @45°   │  @45°   │
+├─────────┼─────────┼─────────┼─────────┤
+│STITCHING│HARDWARE │ INNER   │  EDGE   │  ← Row 4 (Alt Angles)
+│  @45°   │  @45°   │  @45°   │  @45°   │
+└─────────┴─────────┴─────────┴─────────┘
 
-ROW 2 (Material & Craftsmanship):
-- Frame 4: STITCHING/SEAMS - Construction quality (if applicable)
-- Frame 5: HARDWARE - Metal components, zippers, clasps
-- Frame 6: INNER MATERIAL - Interior surface or lining
-- Frame 7: EDGE DETAIL - Corners, edges, finish quality
-
-ROW 3-4: Additional macro angles of the above regions from different perspectives
+MACRO REQUIREMENTS:
+• Fill 90% of frame with detail area
+• Sharp focus on surface texture/material
+• Visible material grain, stitching, finish quality
+• Professional product photography lighting
 `;
   }
 
