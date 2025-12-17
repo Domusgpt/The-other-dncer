@@ -10,8 +10,68 @@ export enum AppStep {
 export type StyleCategory = 'Cinematic' | 'Anime/2D' | 'Digital/Glitch' | 'Artistic';
 export type SubjectCategory = 'CHARACTER' | 'TEXT' | 'SYMBOL';
 export type FrameType = 'body' | 'closeup'; // Distinguish full body from facial frames
-export type SheetRole = 'base' | 'alt' | 'flourish' | 'smooth'; // Added 'smooth'
-export type MoveDirection = 'center' | 'left' | 'right'; // NEW: For choreography
+export type SheetRole = 'base' | 'alt' | 'flourish' | 'smooth' | 'orbital' | 'orbital_pitch' | 'orbital_states' | 'orbital_macro'; // Extended for Orbital commerce engine
+export type MoveDirection = 'center' | 'left' | 'right'; // For choreography
+
+// === ORBITAL COMMERCE ENGINE TYPES ===
+// Kinetic Sprite Architecture for 360° product visualization
+
+export type OrbitalViewAngle =
+  | 'front' | 'front_right_30' | 'front_right_60' | 'right'
+  | 'back_right' | 'back' | 'back_left' | 'left'
+  | 'front_left_60' | 'front_left_30'; // Y-axis rotation angles
+
+export type OrbitalPitchAngle =
+  | 'level' | 'pitch_15' | 'pitch_30' | 'pitch_45' | 'pitch_90'
+  | 'pitch_down_15' | 'pitch_down_30'; // X-axis tilt angles
+
+export type OrbitalProductState =
+  | 'closed' | 'open' | 'active' | 'inactive'
+  | 'exploded' | 'packaged' | 'lifestyle'; // Functional states
+
+export interface OrbitalFrame {
+  url: string;
+  angle: number;           // Continuous rotation angle (0-360)
+  pitch: number;           // Elevation angle (-90 to 90)
+  state: OrbitalProductState;
+  isMirrored: boolean;     // If generated via hemisphere completion
+  isMacro: boolean;        // If this is a detail/zoom frame
+  macroRegion?: string;    // e.g., 'dial', 'texture', 'logo'
+  role: SheetRole;
+}
+
+export interface OrbitalConfig {
+  productName: string;
+  enableHemisphereCompletion: boolean;  // Mirror 0-90° to get 270-360°
+  enablePitchViews: boolean;            // Generate elevation angles
+  enableFunctionalStates: boolean;      // Open/closed/exploded views
+  enableMacroLens: boolean;             // Detail zoom regions
+  macroRegions?: string[];              // Specific areas to macro zoom
+  frictionCoefficient: number;          // Inertial rotation decay (0.9-0.99)
+  springStiffness: number;              // Snap-to-angle stiffness
+  snapToAngles?: number[];              // Optional snap points (e.g., [0, 90, 180, 270])
+}
+
+export const DEFAULT_ORBITAL_CONFIG: OrbitalConfig = {
+  productName: 'Product',
+  enableHemisphereCompletion: true,
+  enablePitchViews: false,
+  enableFunctionalStates: false,
+  enableMacroLens: false,
+  frictionCoefficient: 0.95,
+  springStiffness: 0.1,
+  snapToAngles: undefined,
+};
+
+// Orbital Physics State (for scroll-based interaction)
+export interface OrbitalPhysicsState {
+  currentAngle: number;       // Current Y rotation (0-360)
+  currentPitch: number;       // Current X tilt (-90 to 90)
+  angularVelocity: number;    // Rotation speed (degrees/second)
+  pitchVelocity: number;      // Tilt speed
+  isDragging: boolean;        // User is actively dragging
+  lastInputTime: number;      // For velocity calculation
+}
 
 export interface StylePreset {
   id: string;
