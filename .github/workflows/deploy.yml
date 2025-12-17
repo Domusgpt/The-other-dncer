@@ -2,11 +2,14 @@
 name: Deploy to GitHub Pages
 
 on:
-  # Runs on pushes to main branch
+  # Runs on pushes to main branch or feature branches
   push:
-    branches: ["main", "master"]
+    branches:
+      - "main"
+      - "master"
+      - "claude/**"  # Allow deployment from Claude feature branches
 
-  # Allows manual trigger from Actions tab
+  # Allows manual trigger from Actions tab (can select any branch)
   workflow_dispatch:
 
 # Sets permissions for GITHUB_TOKEN to allow deployment to GitHub Pages
