@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Zap, Layers, LogIn, Activity, FastForward, Upload, FileJson } from 'lucide-react';
+import { Zap, Layers, LogIn, Activity, FastForward, Upload, FileJson, RotateCw, Music } from 'lucide-react';
 import { AppState, AppStep, DEFAULT_STATE, AuthUser, SavedProject } from './types';
 import { STYLE_PRESETS, CREDITS_PER_PACK } from './constants';
 import { Step1Assets, Step2Director } from './components/Steps';
@@ -8,6 +8,9 @@ import { Step4Preview } from './components/Step4Preview';
 import { generateDanceFrames, fileToGenericBase64 } from './services/gemini';
 import { AuthModal, PaymentModal } from './components/Modals';
 import { GlobalBackground } from './components/GlobalBackground';
+import { OrbitalDemo } from './components/OrbitalDemo';
+
+type AppMode = 'dance' | 'orbital';
 
 const triggerImpulse = (type: 'click' | 'hover' | 'type', intensity: number = 1.0) => {
     const event = new CustomEvent('ui-interaction', { detail: { type, intensity } });
@@ -15,8 +18,14 @@ const triggerImpulse = (type: 'click' | 'hover' | 'type', intensity: number = 1.
 };
 
 const App: React.FC = () => {
+  const [appMode, setAppMode] = useState<AppMode>('dance');
   const [appState, setAppState] = useState<AppState>(DEFAULT_STATE);
   const [importRef] = useState<React.RefObject<HTMLInputElement>>(React.createRef());
+
+  // If in Orbital mode, render the OrbitalDemo
+  if (appMode === 'orbital') {
+    return <OrbitalDemo onBack={() => setAppMode('dance')} />;
+  }
 
   const handleImageUpload = async (file: File) => {
     try {
@@ -265,6 +274,15 @@ const App: React.FC = () => {
             
             {/* RIGHT SIDE CONTROLS */}
             <div className="flex items-center gap-4">
+                {/* MODE SWITCHER */}
+                <button
+                    onClick={() => setAppMode('orbital')}
+                    onMouseEnter={() => triggerImpulse('hover', 0.4)}
+                    className="glass-button px-4 py-2 rounded-full text-xs font-bold text-white flex items-center gap-2 border border-cyan-500/30 hover:border-cyan-400/50 hover:bg-cyan-500/10 transition-all"
+                >
+                    <RotateCw size={14} className="text-cyan-400" /> ORBITAL 360°
+                </button>
+
                 {/* IMPORT BUTTON */}
                 <button
                     onClick={() => importRef.current?.click()}

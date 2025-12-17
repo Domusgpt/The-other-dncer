@@ -2,8 +2,8 @@
 import { GoogleGenAI } from "@google/genai";
 import { GeneratedFrame, PoseType, EnergyLevel, SubjectCategory, FrameType, SheetRole, MoveDirection, OrbitalFrame, OrbitalConfig, OrbitalProductState, DEFAULT_ORBITAL_CONFIG } from "../types";
 
-// Use environment variable as per strict guidelines. 
-const API_KEY = process.env.API_KEY || 'AIzaSyDFjSQY6Ne38gtzEd6Q_5zyyW65ah5_anw';
+// Use Vite environment variable (VITE_ prefix required for client-side access)
+const API_KEY = import.meta.env.VITE_GEMINI_API_KEY || '';
 
 // --- UTILITIES ---
 
