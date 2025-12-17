@@ -5,6 +5,13 @@ import { GeneratedFrame, PoseType, EnergyLevel, SubjectCategory, FrameType, Shee
 // Use Vite environment variable (VITE_ prefix required for client-side access)
 const API_KEY = import.meta.env.VITE_GEMINI_API_KEY || '';
 
+// Validate API key is present
+const validateApiKey = () => {
+  if (!API_KEY || API_KEY.trim() === '') {
+    throw new Error('GEMINI_API_KEY is not configured. Please set VITE_GEMINI_API_KEY in your environment or GitHub Secrets.');
+  }
+};
+
 // --- UTILITIES ---
 
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -408,8 +415,11 @@ export const generateDanceFrames = async (
   motionPrompt: string,
   useTurbo: boolean,
   superMode: boolean,
-  onFrameUpdate: (frames: GeneratedFrame[]) => void 
+  onFrameUpdate: (frames: GeneratedFrame[]) => void
 ): Promise<{ frames: GeneratedFrame[], category: SubjectCategory }> => {
+
+  // Validate API key before attempting generation
+  validateApiKey();
 
   const ai = new GoogleGenAI({ apiKey: API_KEY });
   
@@ -848,6 +858,9 @@ export const generateOrbitalFrames = async (
   config: Partial<OrbitalConfig> = {},
   onFrameUpdate: (frames: OrbitalFrame[]) => void
 ): Promise<{ frames: OrbitalFrame[] }> => {
+
+  // Validate API key before attempting generation
+  validateApiKey();
 
   const fullConfig: OrbitalConfig = { ...DEFAULT_ORBITAL_CONFIG, ...config };
   const ai = new GoogleGenAI({ apiKey: API_KEY });
