@@ -405,7 +405,9 @@ const generateSingleSheet = async (
 
     } catch (e: any) {
         console.error(`Failed to generate sheet ${role}:`, e);
-        return { frames: [] };
+        // Propagate error with details instead of swallowing it
+        const errorMsg = e?.message || e?.toString() || 'Unknown error';
+        throw new Error(`Dance sheet ${role} failed: ${errorMsg}`);
     }
 };
 
@@ -725,7 +727,9 @@ const generateSingleOrbitalSheet = async (
 
   } catch (e: any) {
     console.error(`Failed to generate orbital sheet ${role}:`, e);
-    return { frames: [] };
+    // Propagate error with details instead of swallowing it
+    const errorMsg = e?.message || e?.toString() || 'Unknown error';
+    throw new Error(`Orbital sheet ${role} failed: ${errorMsg}`);
   }
 };
 
