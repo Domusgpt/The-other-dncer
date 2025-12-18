@@ -103,8 +103,16 @@ export const OrbitalViewer: React.FC<OrbitalViewerProps> = ({
     let loadedCount = 0;
     const imageMap = new Map<string, HTMLImageElement>();
 
-    frames.forEach((frame) => {
-      const key = `${frame.angle}_${frame.pitch}_${frame.role}_${frame.isMacro ? frame.macroRegion : ''}`;
+    console.log(`[OrbitalViewer] Loading ${frames.length} frames...`);
+
+    // Log frame distribution for debugging
+    const orbitalFrames = frames.filter(f => f.role === 'orbital' && !f.isMacro);
+    console.log(`[OrbitalViewer] Orbital rotation frames: ${orbitalFrames.length}`);
+    console.log(`[OrbitalViewer] Frame angles:`, orbitalFrames.map(f => f.angle).sort((a, b) => a - b));
+
+    frames.forEach((frame, index) => {
+      // Use URL as unique key - most reliable identifier
+      const key = frame.url;
 
       if (frameImagesRef.current.has(key)) {
         imageMap.set(key, frameImagesRef.current.get(key)!);
@@ -117,9 +125,13 @@ export const OrbitalViewer: React.FC<OrbitalViewerProps> = ({
       img.crossOrigin = "anonymous";
       img.onload = () => {
         loadedCount++;
-        if (loadedCount === frames.length) setImagesLoaded(true);
+        if (loadedCount === frames.length) {
+          console.log(`[OrbitalViewer] All ${frames.length} images loaded`);
+          setImagesLoaded(true);
+        }
       };
       img.onerror = () => {
+        console.warn(`[OrbitalViewer] Failed to load frame ${index} (angle: ${frame.angle})`);
         loadedCount++;
         if (loadedCount === frames.length) setImagesLoaded(true);
       };
@@ -130,10 +142,13 @@ export const OrbitalViewer: React.FC<OrbitalViewerProps> = ({
     frameImagesRef.current = imageMap;
   }, [frames]);
 
-  // Get image for a frame
+  // Get image for a frame - use URL as key for reliable matching
   const getFrameImage = useCallback((frame: OrbitalFrame): HTMLImageElement | null => {
-    const key = `${frame.angle}_${frame.pitch}_${frame.role}_${frame.isMacro ? frame.macroRegion : ''}`;
-    return frameImagesRef.current.get(key) || null;
+    const img = frameImagesRef.current.get(frame.url);
+    if (!img) {
+      console.warn(`[OrbitalViewer] No cached image for frame at ${frame.angle}°`);
+    }
+    return img || null;
   }, []);
 
   /**
@@ -233,6 +248,9 @@ export const OrbitalViewer: React.FC<OrbitalViewerProps> = ({
       : quantizeAngleToFrame(angle, frames, { role: 'orbital' });
 
     if (newFrame && newFrame !== currentFrame) {
+      // Log frame change for debugging
+      console.log(`[OrbitalViewer] Frame change: ${currentFrame?.angle}° → ${newFrame.angle}° (display: ${Math.round(angle)}°)`);
+
       // Determine transition mode based on velocity
       const mode: TransitionMode = Math.abs(physicsRef.current.angularVelocity) > 50 ? 'CUT' : 'BLEND';
       triggerTransition(newFrame, mode);
