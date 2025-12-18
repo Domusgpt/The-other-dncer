@@ -1098,7 +1098,7 @@ const generateHemisphere = async (
 
   try {
     const response = await generateWithRetry(ai, {
-      model: 'gemini-2.5-flash-preview-05-20',
+      model: 'gemini-2.5-flash-image',
       contents: {
         parts: [
           { inlineData: { mimeType: 'image/jpeg', data: cleanImage } },
@@ -1106,7 +1106,7 @@ const generateHemisphere = async (
         ]
       },
       config: {
-        responseModalities: ['image', 'text'],
+        imageConfig: { aspectRatio: "1:1" },
         seed: seed
       }
     });
