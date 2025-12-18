@@ -556,76 +556,72 @@ MECHANICAL RULES (CRITICAL):
   if (role === 'orbital') {
     // Primary Y-axis rotation sheet - FULL 360° revolution
     prompt += `═══════════════════════════════════════════════════════════════════
-ROTATION SEQUENCE (Reading Order: Left→Right, Top→Bottom)
+🚨 CRITICAL REQUIREMENT: 16 VISUALLY DISTINCT ROTATION FRAMES 🚨
 ═══════════════════════════════════════════════════════════════════
-You are generating 16 frames showing ONE COMPLETE REVOLUTION (360°)
-of the subject rotating on its vertical axis. Each frame is viewed
-from a FIXED camera position at EQUAL distance.
 
-GRID LAYOUT WITH ANGLES:
+You MUST generate ONE FULL ORBITAL REVOLUTION of this object.
+Each of the 16 grid cells shows the SAME object from a DIFFERENT angle.
+Think of it like a turntable spinning: the object rotates, camera stays fixed.
+
+⚠️ DO NOT generate 16 copies of the same view!
+⚠️ EVERY CELL must show the object rotated to a NEW angle!
+⚠️ The viewer will animate through these frames - they MUST be different!
+
+GRID LAYOUT - 16 FRAMES, 16 DIFFERENT ANGLES:
 ┌─────────┬─────────┬─────────┬─────────┐
-│   0°    │   22°   │   45°   │   67°   │  ← Row 1
-│ (FRONT) │         │         │         │
+│   0°    │   22°   │   45°   │   67°   │  ← Row 1: FRONT rotating to RIGHT
+│ (FRONT) │(turn 1) │(turn 2) │(turn 3) │
 ├─────────┼─────────┼─────────┼─────────┤
-│   90°   │  112°   │  135°   │  157°   │  ← Row 2
-│ (RIGHT) │         │         │         │
+│   90°   │  112°   │  135°   │  157°   │  ← Row 2: RIGHT rotating to BACK
+│ (RIGHT) │(turn 4) │(turn 5) │(turn 6) │
 ├─────────┼─────────┼─────────┼─────────┤
-│  180°   │  202°   │  225°   │  247°   │  ← Row 3
-│ (BACK)  │         │         │         │
+│  180°   │  202°   │  225°   │  247°   │  ← Row 3: BACK rotating to LEFT
+│ (BACK)  │(turn 7) │(turn 8) │(turn 9) │
 ├─────────┼─────────┼─────────┼─────────┤
-│  270°   │  292°   │  315°   │  337°   │  ← Row 4
-│ (LEFT)  │         │         │         │
+│  270°   │  292°   │  315°   │  337°   │  ← Row 4: LEFT rotating to FRONT
+│ (LEFT)  │(turn10) │(turn11) │(turn12) │
 └─────────┴─────────┴─────────┴─────────┘
 
-═══════════════════════════════════════════════════════════════════
-INPUT IMAGE REFERENCE
-═══════════════════════════════════════════════════════════════════
-The input image(s) provided are reference views of the subject:
+WHAT EACH FRAME MUST SHOW:
+• Frame 0 (0°):   FRONT - You see the FRONT of the object
+• Frame 1 (22°):  Front rotated slightly right
+• Frame 2 (45°):  Halfway between front and right side
+• Frame 3 (67°):  Almost right side, front corner visible
+• Frame 4 (90°):  RIGHT SIDE - Perfect profile view
+• Frame 5 (112°): Right side with back corner appearing
+• Frame 6 (135°): Halfway between right and back
+• Frame 7 (157°): Almost back view, right corner visible
+• Frame 8 (180°): BACK - You see the BACK of the object
+• Frame 9 (202°): Back rotated slightly showing left
+• Frame 10 (225°): Halfway between back and left
+• Frame 11 (247°): Almost left side, back corner visible
+• Frame 12 (270°): LEFT SIDE - Perfect profile view
+• Frame 13 (292°): Left side with front corner appearing
+• Frame 14 (315°): Halfway between left and front
+• Frame 15 (337°): Almost front view, left corner visible
 
-        FRONT (0°)                    BACK (180°)
-      ┌───────────┐                 ┌───────────┐
-      │           │                 │           │
-      │    ◉      │  ←─── 180° ───→ │      ◉    │
-      │   /|\\     │    rotation     │     /|\\   │
-      │   / \\     │                 │     / \\   │
-      └───────────┘                 └───────────┘
-           ↑                              ↑
-      Input Image 1               Input Image 2
-      (if provided)               (if provided)
+TURNTABLE VISUALIZATION:
+         CAMERA (fixed position)
+              │
+              │
+              ▼
+    ┌─────────────────────┐
+    │    TURNTABLE        │
+    │         ↻           │  Object spins clockwise
+    │    [OBJECT]         │  Camera watches from one spot
+    │                     │
+    └─────────────────────┘
 
-• 0° = FRONT VIEW (facing camera directly)
-• 90° = RIGHT SIDE (subject's right shoulder toward camera)
-• 180° = BACK VIEW (back of subject facing camera)
-• 270° = LEFT SIDE (subject's left shoulder toward camera)
+The object makes ONE COMPLETE 360° ROTATION.
+You capture 16 snapshots at equal intervals (every 22.5°).
+When played back, it creates a smooth spinning animation.
 
-FRAME-BY-FRAME BREAKDOWN:
-Row 1: Front Quarter (0° → 67°)
-  • Frame 0:  0° - FRONT (Hero shot, full frontal view)
-  • Frame 1:  22° - Slight turn right, front still dominant
-  • Frame 2:  45° - Quarter turn, showing right side emerging
-  • Frame 3:  67° - Three-quarter view, right side prominent
-
-Row 2: Right Quarter (90° → 157°)
-  • Frame 4:  90° - RIGHT PROFILE (perfect side view)
-  • Frame 5:  112° - Right-back transition
-  • Frame 6:  135° - Back corner becoming visible
-  • Frame 7:  157° - Back almost fully visible
-
-Row 3: Back Quarter (180° → 247°)
-  • Frame 8:  180° - BACK (direct rear view)
-  • Frame 9:  202° - Slight turn showing left side
-  • Frame 10: 225° - Back-left corner view
-  • Frame 11: 247° - Left side emerging
-
-Row 4: Left Quarter (270° → 337°)
-  • Frame 12: 270° - LEFT PROFILE (perfect side view)
-  • Frame 13: 292° - Left-front transition
-  • Frame 14: 315° - Front corner becoming visible
-  • Frame 15: 337° - Nearly back to front view
-
-CRITICAL: Each frame shows the SAME subject from a different angle
-as if the subject is on a turntable rotating clockwise when viewed
-from above. The camera NEVER moves - only the subject rotates.
+TECHNICAL REQUIREMENTS:
+• Camera: Fixed position, eye-level, same distance for all frames
+• Lighting: Soft-box, consistent across ALL frames
+• Background: Pure white (#FFFFFF)
+• Scale: Object fills 80% of cell, perfectly centered
+• NO shadows, NO reflections on background
 `;
   } else if (role === 'orbital_pitch') {
     // Elevation/pitch views
@@ -762,24 +758,47 @@ const generateSingleOrbitalSheet = async (
   const rows = 4;
   const cols = 4;
 
-  const systemPrompt = constructOrbitalPrompt(config.productName, role, config.macroRegions);
+  let systemPrompt = constructOrbitalPrompt(config.productName, role, config.macroRegions);
 
   console.log(`[Gemini Orbital] Generating Sheet: ${role}...`);
 
-  const cleanBase64 = imageBase64.includes('base64,') ? imageBase64.split('base64,')[1] : imageBase64;
-  const cleanContext = contextImageBase64 && contextImageBase64.includes('base64,') ? contextImageBase64.split('base64,')[1] : contextImageBase64;
+  const cleanFront = imageBase64.includes('base64,') ? imageBase64.split('base64,')[1] : imageBase64;
+  const cleanBack = config.backImageBase64?.includes('base64,') ? config.backImageBase64.split('base64,')[1] : config.backImageBase64;
+  const cleanContext = contextImageBase64?.includes('base64,') ? contextImageBase64.split('base64,')[1] : contextImageBase64;
 
-  const parts: any[] = [
-    { inlineData: { mimeType: 'image/jpeg', data: cleanBase64 } }
-  ];
+  const parts: any[] = [];
 
-  let finalPrompt = systemPrompt;
-  if (cleanContext) {
-    parts.push({ inlineData: { mimeType: 'image/jpeg', data: cleanContext } });
-    finalPrompt += "\nREFERENCE: Use the second image as the MASTER REFERENCE for product identity, lighting, and scale consistency.";
+  // Add front image (required)
+  parts.push({ inlineData: { mimeType: 'image/jpeg', data: cleanFront } });
+
+  // Add back image if provided (critical for accurate rotation)
+  if (cleanBack) {
+    parts.push({ inlineData: { mimeType: 'image/jpeg', data: cleanBack } });
+    systemPrompt += `
+
+═══════════════════════════════════════════════════════════════════
+TWO REFERENCE IMAGES PROVIDED
+═══════════════════════════════════════════════════════════════════
+IMAGE 1 = FRONT VIEW (0°) - This is what the subject looks like from the FRONT
+IMAGE 2 = BACK VIEW (180°) - This is what the subject looks like from the BACK
+
+Use BOTH images to accurately generate all 16 intermediate rotation angles.
+The front image defines frames 0-3 (0° to 67°).
+The back image defines frames 8-11 (180° to 247°).
+Interpolate smoothly between them for frames 4-7 and 12-15.
+
+CRITICAL: Every single frame MUST show a DIFFERENT angle of rotation.
+Do NOT repeat the same view. Each of the 16 cells must be VISUALLY DISTINCT.
+`;
   }
 
-  parts.push({ text: finalPrompt });
+  // Add context image for consistency across sheets
+  if (cleanContext) {
+    parts.push({ inlineData: { mimeType: 'image/jpeg', data: cleanContext } });
+    systemPrompt += "\nCONSISTENCY REFERENCE: Match the style, lighting, and scale of the previous sheet.";
+  }
+
+  parts.push({ text: systemPrompt });
 
   try {
     const response = await generateWithRetry(ai, {

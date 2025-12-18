@@ -31,11 +31,13 @@ type DemoStep = 'upload' | 'configure' | 'generating' | 'viewer';
 
 export const OrbitalDemo: React.FC<OrbitalDemoProps> = ({ onBack }) => {
   const [step, setStep] = useState<DemoStep>('upload');
-  const [imageFile, setImageFile] = useState<File | null>(null);
-  const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [frames, setFrames] = useState<OrbitalFrame[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [generationProgress, setGenerationProgress] = useState<string>('');
+
+  // Front and Back image state
+  const [frontImage, setFrontImage] = useState<string | null>(null);
+  const [backImage, setBackImage] = useState<string | null>(null);
 
   // Configuration state
   const [config, setConfig] = useState<OrbitalConfig>({
@@ -45,39 +47,65 @@ export const OrbitalDemo: React.FC<OrbitalDemoProps> = ({ onBack }) => {
     enableMacroLens: true,
   });
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const frontInputRef = useRef<HTMLInputElement>(null);
+  const backInputRef = useRef<HTMLInputElement>(null);
 
-  const handleFileSelect = useCallback(async (file: File) => {
+  const handleFrontSelect = useCallback(async (file: File) => {
     try {
       setError(null);
       const base64 = await fileToGenericBase64(file);
-      setImageFile(file);
-      setImagePreview(base64);
-      setStep('configure');
+      setFrontImage(base64);
+      // Auto-advance to configure if we have at least front image
+      if (base64) setStep('configure');
     } catch (e: any) {
-      setError(`Failed to load image: ${e.message}`);
+      setError(`Failed to load front image: ${e.message}`);
     }
   }, []);
 
-  const handleDrop = useCallback((e: React.DragEvent) => {
+  const handleBackSelect = useCallback(async (file: File) => {
+    try {
+      setError(null);
+      const base64 = await fileToGenericBase64(file);
+      setBackImage(base64);
+    } catch (e: any) {
+      setError(`Failed to load back image: ${e.message}`);
+    }
+  }, []);
+
+  const handleFrontDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     const file = e.dataTransfer.files[0];
     if (file && file.type.startsWith('image/')) {
-      handleFileSelect(file);
+      handleFrontSelect(file);
     }
-  }, [handleFileSelect]);
+  }, [handleFrontSelect]);
+
+  const handleBackDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    const file = e.dataTransfer.files[0];
+    if (file && file.type.startsWith('image/')) {
+      handleBackSelect(file);
+    }
+  }, [handleBackSelect]);
 
   const handleGenerate = useCallback(async () => {
-    if (!imagePreview) return;
+    if (!frontImage) return;
 
     setStep('generating');
     setError(null);
     setGenerationProgress('Initializing Orbital Engine...');
 
+    // Build config with images
+    const fullConfig: OrbitalConfig = {
+      ...config,
+      frontImageBase64: frontImage,
+      backImageBase64: backImage || undefined,
+    };
+
     try {
       const result = await generateOrbitalFrames(
-        imagePreview,
-        config,
+        frontImage,
+        fullConfig,
         (partialFrames) => {
           setFrames(partialFrames);
           const rotationFrames = partialFrames.filter(f => f.role === 'orbital').length;
@@ -96,12 +124,12 @@ export const OrbitalDemo: React.FC<OrbitalDemoProps> = ({ onBack }) => {
       setError(e.message || 'Generation failed');
       setStep('configure');
     }
-  }, [imagePreview, config]);
+  }, [frontImage, backImage, config]);
 
   const resetDemo = useCallback(() => {
     setStep('upload');
-    setImageFile(null);
-    setImagePreview(null);
+    setFrontImage(null);
+    setBackImage(null);
     setFrames([]);
     setError(null);
     setGenerationProgress('');
@@ -148,40 +176,100 @@ export const OrbitalDemo: React.FC<OrbitalDemoProps> = ({ onBack }) => {
 
         {/* STEP 1: Upload */}
         {step === 'upload' && (
-          <div className="max-w-2xl mx-auto">
+          <div className="max-w-4xl mx-auto">
             <div className="text-center mb-12">
               <h2 className="text-4xl font-bold mb-4">
                 Upload Your Product
               </h2>
               <p className="text-gray-400 text-lg">
-                Transform any product photo into an interactive 360° viewer
+                Upload FRONT and BACK views for best results
               </p>
             </div>
 
-            <div
-              onDrop={handleDrop}
-              onDragOver={(e) => e.preventDefault()}
-              onClick={() => fileInputRef.current?.click()}
-              className="border-2 border-dashed border-white/20 hover:border-cyan-500/50 rounded-2xl p-16 text-center cursor-pointer transition-all hover:bg-white/5 group"
-            >
-              <div className="w-20 h-20 mx-auto mb-6 bg-gradient-to-br from-cyan-500/20 to-blue-600/20 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform">
-                <Upload size={32} className="text-cyan-400" />
+            {/* Two-image upload grid */}
+            <div className="grid grid-cols-2 gap-6 mb-8">
+              {/* FRONT Image Upload */}
+              <div
+                onDrop={handleFrontDrop}
+                onDragOver={(e) => e.preventDefault()}
+                onClick={() => frontInputRef.current?.click()}
+                className={`border-2 border-dashed rounded-2xl p-8 text-center cursor-pointer transition-all group
+                  ${frontImage
+                    ? 'border-green-500/50 bg-green-500/5'
+                    : 'border-white/20 hover:border-cyan-500/50 hover:bg-white/5'}`}
+              >
+                {frontImage ? (
+                  <div>
+                    <img src={frontImage} alt="Front view" className="w-full aspect-square object-contain rounded-xl bg-white mb-4" />
+                    <p className="text-green-400 font-medium flex items-center justify-center gap-2">
+                      <CheckCircle size={16} /> Front View (0°)
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="w-16 h-16 mx-auto mb-4 bg-gradient-to-br from-cyan-500/20 to-blue-600/20 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
+                      <ImageIcon size={28} className="text-cyan-400" />
+                    </div>
+                    <p className="text-lg font-medium mb-1">FRONT View (0°)</p>
+                    <p className="text-sm text-gray-500">Required • Primary reference</p>
+                  </>
+                )}
               </div>
-              <p className="text-xl font-medium mb-2">
-                Drop your product image here
-              </p>
-              <p className="text-gray-500">
-                or click to browse • PNG, JPG, WebP
-              </p>
+
+              {/* BACK Image Upload */}
+              <div
+                onDrop={handleBackDrop}
+                onDragOver={(e) => e.preventDefault()}
+                onClick={() => backInputRef.current?.click()}
+                className={`border-2 border-dashed rounded-2xl p-8 text-center cursor-pointer transition-all group
+                  ${backImage
+                    ? 'border-green-500/50 bg-green-500/5'
+                    : 'border-white/20 hover:border-purple-500/50 hover:bg-white/5'}`}
+              >
+                {backImage ? (
+                  <div>
+                    <img src={backImage} alt="Back view" className="w-full aspect-square object-contain rounded-xl bg-white mb-4" />
+                    <p className="text-green-400 font-medium flex items-center justify-center gap-2">
+                      <CheckCircle size={16} /> Back View (180°)
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="w-16 h-16 mx-auto mb-4 bg-gradient-to-br from-purple-500/20 to-pink-600/20 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
+                      <ImageIcon size={28} className="text-purple-400" />
+                    </div>
+                    <p className="text-lg font-medium mb-1">BACK View (180°)</p>
+                    <p className="text-sm text-gray-500">Optional • Improves accuracy</p>
+                  </>
+                )}
+              </div>
             </div>
 
             <input
-              ref={fileInputRef}
+              ref={frontInputRef}
               type="file"
               accept="image/*"
-              onChange={(e) => e.target.files?.[0] && handleFileSelect(e.target.files[0])}
+              onChange={(e) => e.target.files?.[0] && handleFrontSelect(e.target.files[0])}
               className="hidden"
             />
+            <input
+              ref={backInputRef}
+              type="file"
+              accept="image/*"
+              onChange={(e) => e.target.files?.[0] && handleBackSelect(e.target.files[0])}
+              className="hidden"
+            />
+
+            {/* Proceed button */}
+            {frontImage && (
+              <button
+                onClick={() => setStep('configure')}
+                className="w-full py-4 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-bold rounded-xl flex items-center justify-center gap-3 transition-all hover:scale-[1.02] shadow-lg shadow-cyan-500/25 mb-8"
+              >
+                Continue to Configure
+                {!backImage && <span className="text-cyan-200 text-sm">(Back image optional)</span>}
+              </button>
+            )}
 
             {error && (
               <div className="mt-6 p-4 bg-red-500/10 border border-red-500/30 rounded-xl flex items-center gap-3">
@@ -190,8 +278,29 @@ export const OrbitalDemo: React.FC<OrbitalDemoProps> = ({ onBack }) => {
               </div>
             )}
 
+            {/* Visual explanation */}
+            <div className="mt-8 p-6 bg-white/5 rounded-2xl">
+              <h3 className="font-bold text-lg mb-4 text-center">How It Works</h3>
+              <div className="flex items-center justify-center gap-4 text-center">
+                <div className="flex-1">
+                  <div className="text-4xl mb-2">📷</div>
+                  <p className="text-sm text-gray-400">FRONT (0°)</p>
+                </div>
+                <div className="text-2xl text-gray-600">→</div>
+                <div className="flex-1">
+                  <div className="text-4xl mb-2">🔄</div>
+                  <p className="text-sm text-gray-400">AI generates 16 angles</p>
+                </div>
+                <div className="text-2xl text-gray-600">←</div>
+                <div className="flex-1">
+                  <div className="text-4xl mb-2">📷</div>
+                  <p className="text-sm text-gray-400">BACK (180°)</p>
+                </div>
+              </div>
+            </div>
+
             {/* Features */}
-            <div className="mt-16 grid grid-cols-3 gap-6">
+            <div className="mt-8 grid grid-cols-3 gap-6">
               {[
                 { icon: RotateCw, title: '360° Rotation', desc: 'Full turntable views' },
                 { icon: Sparkles, title: 'AI Generated', desc: 'Gemini 2.5 Flash' },
@@ -216,17 +325,43 @@ export const OrbitalDemo: React.FC<OrbitalDemoProps> = ({ onBack }) => {
             </div>
 
             <div className="grid grid-cols-2 gap-8">
-              {/* Preview */}
-              <div className="bg-white/5 rounded-2xl p-6">
-                <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-4">
-                  Source Image
-                </h3>
-                {imagePreview && (
-                  <img
-                    src={imagePreview}
-                    alt="Product preview"
-                    className="w-full aspect-square object-contain rounded-xl bg-white"
-                  />
+              {/* Preview - Front and Back */}
+              <div className="space-y-4">
+                <div className="bg-white/5 rounded-2xl p-4">
+                  <h3 className="text-xs font-bold text-cyan-400 uppercase tracking-wider mb-3">
+                    Front View (0°)
+                  </h3>
+                  {frontImage && (
+                    <img
+                      src={frontImage}
+                      alt="Front view"
+                      className="w-full aspect-square object-contain rounded-xl bg-white"
+                    />
+                  )}
+                </div>
+                {backImage ? (
+                  <div className="bg-white/5 rounded-2xl p-4">
+                    <h3 className="text-xs font-bold text-purple-400 uppercase tracking-wider mb-3">
+                      Back View (180°)
+                    </h3>
+                    <img
+                      src={backImage}
+                      alt="Back view"
+                      className="w-full aspect-square object-contain rounded-xl bg-white"
+                    />
+                  </div>
+                ) : (
+                  <div
+                    onClick={() => backInputRef.current?.click()}
+                    className="bg-white/5 rounded-2xl p-4 border-2 border-dashed border-white/10 hover:border-purple-500/50 cursor-pointer transition-colors"
+                  >
+                    <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">
+                      Back View (Optional)
+                    </h3>
+                    <div className="aspect-square flex items-center justify-center">
+                      <p className="text-gray-500 text-sm">+ Add back image for better accuracy</p>
+                    </div>
+                  </div>
                 )}
               </div>
 

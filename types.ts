@@ -42,6 +42,8 @@ export interface OrbitalFrame {
 
 export interface OrbitalConfig {
   productName: string;
+  frontImageBase64?: string;          // Front view (0°) reference image
+  backImageBase64?: string;           // Back view (180°) reference image - CRITICAL for accurate rotation
   enableHemisphereCompletion: boolean;  // Mirror 0-90° to get 270-360°
   enablePitchViews: boolean;            // Generate elevation angles
   enableFunctionalStates: boolean;      // Open/closed/exploded views
