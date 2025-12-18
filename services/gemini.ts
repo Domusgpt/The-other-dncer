@@ -958,143 +958,143 @@ const generateVirtualMacros = async (
 };
 
 /**
- * SIMPLIFIED HEMISPHERE PROMPT
- * Generates only 4 frames (2x2 grid) for better AI accuracy
+ * CLOCK-FACE ORBITAL GENERATION
+ * Uses clock positions (12, 1, 2... 11 o'clock) for intuitive angle description
+ *
+ * Clock to Degrees mapping:
+ * 12:00 = 0° (FRONT)    3:00 = 90° (RIGHT)
+ * 6:00 = 180° (BACK)    9:00 = 270° (LEFT)
  */
-const constructHemispherePrompt = (
+
+const CLOCK_TO_DEGREES: Record<number, number> = {
+  12: 0,   1: 30,   2: 60,   3: 90,
+  4: 120,  5: 150,  6: 180,  7: 210,
+  8: 240,  9: 270,  10: 300, 11: 330
+};
+
+/**
+ * Build clock-face prompt with visual diagram
+ */
+const constructClockPrompt = (
   productName: string,
-  hemisphere: 'front' | 'back'
+  clockPositions: number[] // e.g., [12, 1, 2, 3, 4, 5]
 ): string => {
-  const isFront = hemisphere === 'front';
+  const positions = clockPositions.map(h => `${h}:00`).join(', ');
 
-  return `You are a professional product photographer creating a turntable rotation for "${productName}".
+  return `You are a product photographer. Create a 3×2 grid image (768×512 pixels) showing "${productName}" from 6 different angles.
 
-OUTPUT: Create a single 512×512 pixel image with a 2×2 grid (4 cells, each 256×256 pixels).
+CLOCK-FACE VIEWING POSITIONS:
+Imagine you're standing at different positions around a clock, looking at the product in the center.
 
-THE SETUP:
-The product sits on a turntable. Your camera stays fixed. The turntable rotates the product.
-You are photographing the ${isFront ? 'FRONT half' : 'BACK half'} of the rotation (${isFront ? '0° to 135°' : '180° to 315°'}).
+                    12:00 (FRONT)
+                         ↓
+            11:00  ←─────┼─────→  1:00
+                   ╲     │     ╱
+           10:00 ←──╲────┼────╱──→ 2:00
+                     ╲   │   ╱
+            9:00 ←────[PRODUCT]────→ 3:00
+             (LEFT)      │      (RIGHT)
+                     ╱   │   ╲
+            8:00 ←──╱────┼────╲──→ 4:00
+                   ╱     │     ╲
+             7:00  ←─────┼─────→  5:00
+                         ↑
+                    6:00 (BACK)
 
-THE 4 PHOTOGRAPHS:
-+------------------+------------------+
-|     Cell 0       |     Cell 1       |
-| ${isFront ? '0° FRONT VIEW' : '180° BACK VIEW'}    | ${isFront ? '45° CORNER' : '225° CORNER'}        |
-| ${isFront ? 'Product facing you' : 'Product back to you'} | ${isFront ? 'Front + right side' : 'Back + left side'}   |
-+------------------+------------------+
-|     Cell 2       |     Cell 3       |
-| ${isFront ? '90° RIGHT SIDE' : '270° LEFT SIDE'}   | ${isFront ? '135° CORNER' : '315° CORNER'}       |
-| ${isFront ? 'Pure side profile' : 'Pure side profile'} | ${isFront ? 'Right + back' : 'Left + front'}        |
-+------------------+------------------+
+YOUR 6 PHOTOGRAPHS (positions: ${positions}):
++------------------+------------------+------------------+
+|   ${clockPositions[0]}:00 position  |   ${clockPositions[1]}:00 position  |   ${clockPositions[2]}:00 position  |
+|   (${CLOCK_TO_DEGREES[clockPositions[0]]}°)           |   (${CLOCK_TO_DEGREES[clockPositions[1]]}°)           |   (${CLOCK_TO_DEGREES[clockPositions[2]]}°)           |
++------------------+------------------+------------------+
+|   ${clockPositions[3]}:00 position  |   ${clockPositions[4]}:00 position  |   ${clockPositions[5]}:00 position  |
+|   (${CLOCK_TO_DEGREES[clockPositions[3]]}°)          |   (${CLOCK_TO_DEGREES[clockPositions[4]]}°)          |   (${CLOCK_TO_DEGREES[clockPositions[5]]}°)          |
++------------------+------------------+------------------+
 
-CRITICAL REQUIREMENTS:
-• Each cell shows the product from a DIFFERENT angle (45° apart)
-• Product stays CENTERED and SAME SIZE in all 4 cells
-• Pure white background (#FFFFFF)
-• Identical soft lighting in all cells
-• NO shadows on background
+WHAT EACH POSITION SEES:
+${clockPositions.map(h => {
+  const deg = CLOCK_TO_DEGREES[h];
+  let desc = '';
+  if (h === 12) desc = 'FRONT face directly';
+  else if (h === 6) desc = 'BACK face directly';
+  else if (h === 3) desc = 'RIGHT side profile';
+  else if (h === 9) desc = 'LEFT side profile';
+  else if (h === 1 || h === 2) desc = 'Front turning toward right side';
+  else if (h === 4 || h === 5) desc = 'Right side turning toward back';
+  else if (h === 7 || h === 8) desc = 'Back turning toward left side';
+  else if (h === 10 || h === 11) desc = 'Left side turning toward front';
+  return `• ${h}:00 (${deg}°): You see the ${desc}`;
+}).join('\n')}
 
-The reference image shows the ${isFront ? 'front (0°)' : 'back (180°)'} view. Generate all 4 angles from that reference.`;
+REQUIREMENTS:
+• Each cell shows a DIFFERENT viewing angle
+• Product CENTERED and SAME SIZE in all 6 cells
+• Pure white background
+• Consistent soft lighting
+• Cell size: 256×256 pixels each`;
 };
 
 /**
- * Generate interpolated frame between two frames using canvas blend
+ * Slice a 3x2 grid (768x512) into 6 frames
  */
-const createBlendedFrame = (frame1Url: string, frame2Url: string, t: number = 0.5): Promise<string> => {
-  return new Promise(async (resolve, reject) => {
-    try {
-      const [img1, img2] = await Promise.all([
-        loadImageWithTimeout(frame1Url, 5000),
-        loadImageWithTimeout(frame2Url, 5000)
-      ]);
+const sliceClockSheet = async (base64Image: string): Promise<string[]> => {
+  try {
+    const img = await loadImageWithTimeout(base64Image, 8000);
 
-      const canvas = document.createElement('canvas');
-      canvas.width = 256;
-      canvas.height = 256;
-      const ctx = canvas.getContext('2d');
+    const canvas = document.createElement('canvas');
+    canvas.width = 768;
+    canvas.height = 512;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error("Canvas failed");
 
-      if (!ctx) { reject("Canvas context failed"); return; }
+    // Stretch to fit expected dimensions
+    ctx.drawImage(img, 0, 0, img.width, img.height, 0, 0, 768, 512);
 
-      // Draw first frame
-      ctx.globalAlpha = 1 - t;
-      ctx.drawImage(img1, 0, 0, 256, 256);
+    const frames: string[] = [];
+    const CELL_W = 256;
+    const CELL_H = 256;
 
-      // Blend second frame on top
-      ctx.globalAlpha = t;
-      ctx.drawImage(img2, 0, 0, 256, 256);
+    // 3 columns x 2 rows = 6 cells
+    for (let row = 0; row < 2; row++) {
+      for (let col = 0; col < 3; col++) {
+        const cellCanvas = document.createElement('canvas');
+        cellCanvas.width = CELL_W;
+        cellCanvas.height = CELL_H;
+        const cellCtx = cellCanvas.getContext('2d');
 
-      ctx.globalAlpha = 1;
-      resolve(canvas.toDataURL('image/jpeg', 0.85));
-    } catch (e) {
-      console.error("Blend frame failed", e);
-      reject(e);
-    }
-  });
-};
-
-/**
- * Slice a 2x2 sprite sheet into 4 frames
- */
-const sliceHemisphereSheet = (base64Image: string): Promise<string[]> => {
-  return new Promise(async (resolve, reject) => {
-    try {
-      const img = await loadImageWithTimeout(base64Image, 8000);
-
-      const normCanvas = document.createElement('canvas');
-      normCanvas.width = 512;
-      normCanvas.height = 512;
-      const normCtx = normCanvas.getContext('2d');
-
-      if (!normCtx) { reject("Canvas context failed"); return; }
-
-      // Stretch to fit 512x512
-      normCtx.drawImage(img, 0, 0, img.width, img.height, 0, 0, 512, 512);
-
-      const frames: string[] = [];
-      const CELL_SIZE = 256;
-
-      // 2x2 grid = 4 cells
-      for (let row = 0; row < 2; row++) {
-        for (let col = 0; col < 2; col++) {
-          const cellCanvas = document.createElement('canvas');
-          cellCanvas.width = CELL_SIZE;
-          cellCanvas.height = CELL_SIZE;
-          const cellCtx = cellCanvas.getContext('2d');
-
-          if (cellCtx) {
-            cellCtx.drawImage(
-              normCanvas,
-              col * CELL_SIZE, row * CELL_SIZE, CELL_SIZE, CELL_SIZE,
-              0, 0, CELL_SIZE, CELL_SIZE
-            );
-            frames.push(cellCanvas.toDataURL('image/jpeg', 0.85));
-          }
+        if (cellCtx) {
+          cellCtx.drawImage(
+            canvas,
+            col * CELL_W, row * CELL_H, CELL_W, CELL_H,
+            0, 0, CELL_W, CELL_H
+          );
+          frames.push(cellCanvas.toDataURL('image/jpeg', 0.85));
         }
       }
-      resolve(frames);
-    } catch (e) {
-      console.error("Slice hemisphere sheet failed", e);
-      reject(e);
     }
-  });
+    return frames;
+  } catch (e) {
+    console.error("Slice clock sheet failed:", e);
+    return [];
+  }
 };
 
 /**
- * Generate a single hemisphere (front or back) - 4 frames
+ * Generate one clock-face sheet (6 frames)
  */
-const generateHemisphere = async (
+const generateClockSheet = async (
   ai: GoogleGenAI,
-  hemisphere: 'front' | 'back',
-  referenceImageBase64: string,
+  clockPositions: number[],
+  referenceImage: string,
   productName: string,
   seed: number
 ): Promise<OrbitalFrame[]> => {
 
-  const prompt = constructHemispherePrompt(productName, hemisphere);
-  const cleanImage = referenceImageBase64.includes('base64,')
-    ? referenceImageBase64.split('base64,')[1]
-    : referenceImageBase64;
+  const prompt = constructClockPrompt(productName, clockPositions);
+  const cleanImage = referenceImage.includes('base64,')
+    ? referenceImage.split('base64,')[1]
+    : referenceImage;
 
-  console.log(`[Orbital] Generating ${hemisphere} hemisphere (4 frames)...`);
+  console.log(`[Orbital] Generating clock positions: ${clockPositions.join(', ')} o'clock`);
 
   try {
     const response = await generateWithRetry(ai, {
@@ -1106,35 +1106,32 @@ const generateHemisphere = async (
         ]
       },
       config: {
-        imageConfig: { aspectRatio: "1:1" },
+        imageConfig: { aspectRatio: "3:2" },
         seed: seed
       }
     });
 
     const candidate = response.candidates?.[0];
-    if (!candidate) throw new Error("No candidates returned");
+    if (!candidate) throw new Error("No candidates");
 
     let sheetBase64: string | undefined;
-    if (candidate.content?.parts) {
-      for (const part of candidate.content.parts) {
-        if (part.inlineData?.data) {
-          sheetBase64 = part.inlineData.data;
-          break;
-        }
+    for (const part of candidate.content?.parts || []) {
+      if (part.inlineData?.data) {
+        sheetBase64 = part.inlineData.data;
+        break;
       }
     }
 
     if (!sheetBase64) {
-      console.warn(`[Orbital] ${hemisphere} hemisphere returned no image`);
+      console.warn(`[Orbital] Clock sheet returned no image`);
       return [];
     }
 
-    const rawFrames = await sliceHemisphereSheet(`data:image/jpeg;base64,${sheetBase64}`);
-    const baseAngle = hemisphere === 'front' ? 0 : 180;
+    const rawFrames = await sliceClockSheet(`data:image/jpeg;base64,${sheetBase64}`);
 
     const frames: OrbitalFrame[] = rawFrames.map((url, i) => ({
       url,
-      angle: baseAngle + (i * 45), // 0,45,90,135 or 180,225,270,315
+      angle: CLOCK_TO_DEGREES[clockPositions[i]],
       pitch: 0,
       state: 'closed' as OrbitalProductState,
       role: 'orbital' as SheetRole,
@@ -1142,18 +1139,18 @@ const generateHemisphere = async (
       isMacro: false
     }));
 
-    console.log(`[Orbital] ${hemisphere}: ${frames.length} frames at ${frames.map(f => f.angle + '°').join(', ')}`);
+    console.log(`[Orbital] Got ${frames.length} frames: ${frames.map(f => f.angle + '°').join(', ')}`);
     return frames;
 
   } catch (e) {
-    console.error(`[Orbital] ${hemisphere} generation failed:`, e);
+    console.error(`[Orbital] Clock sheet failed:`, e);
     return [];
   }
 };
 
 /**
- * SIMPLIFIED ORBITAL GENERATION
- * Two-hemisphere approach: Front (0-135°) + Back (180-315°) + Interpolation
+ * MAIN ORBITAL GENERATION - Clock Face Approach
+ * Generates 12 frames (all clock positions) in 2 parallel API calls
  */
 export const generateOrbitalFrames = async (
   imageBase64: string,
@@ -1167,76 +1164,36 @@ export const generateOrbitalFrames = async (
   const ai = new GoogleGenAI({ apiKey: API_KEY });
   const seed = Math.floor(Math.random() * 2147483647);
 
-  console.log("[Orbital] === SIMPLIFIED 2-HEMISPHERE GENERATION ===");
+  console.log("[Orbital] === CLOCK-FACE GENERATION (12 positions) ===");
   console.log("[Orbital] Seed:", seed);
 
-  let allFrames: OrbitalFrame[] = [];
+  // Two sheets generated IN PARALLEL
+  // Sheet A: 12, 1, 2, 3, 4, 5 o'clock (front-right half)
+  // Sheet B: 6, 7, 8, 9, 10, 11 o'clock (back-left half)
 
-  // 1. GENERATE FRONT HEMISPHERE (0°, 45°, 90°, 135°)
-  const frontFrames = await generateHemisphere(ai, 'front', imageBase64, fullConfig.productName, seed);
-
-  if (frontFrames.length === 0) {
-    throw new Error("Front hemisphere generation failed.");
-  }
-
-  allFrames = [...frontFrames];
-  onFrameUpdate(allFrames);
-
-  // 2. GENERATE BACK HEMISPHERE (180°, 225°, 270°, 315°)
+  const frontReference = imageBase64;
   const backReference = fullConfig.backImageBase64 || imageBase64;
-  await delay(500); // Brief pause between API calls
 
-  const backFrames = await generateHemisphere(ai, 'back', backReference, fullConfig.productName, seed);
+  console.log("[Orbital] Starting PARALLEL generation of both sheets...");
 
-  if (backFrames.length > 0) {
-    allFrames = [...allFrames, ...backFrames];
-    onFrameUpdate(allFrames);
+  const [sheetA, sheetB] = await Promise.all([
+    generateClockSheet(ai, [12, 1, 2, 3, 4, 5], frontReference, fullConfig.productName, seed),
+    generateClockSheet(ai, [6, 7, 8, 9, 10, 11], backReference, fullConfig.productName, seed + 1)
+  ]);
+
+  let allFrames = [...sheetA, ...sheetB];
+
+  if (allFrames.length === 0) {
+    throw new Error("Both clock sheets failed to generate.");
   }
 
-  // 3. CREATE INTERPOLATED FRAMES (22.5°, 67.5°, etc.)
-  console.log("[Orbital] Creating interpolated in-between frames...");
-
-  // Sort by angle first
+  // Sort by angle
   allFrames.sort((a, b) => a.angle - b.angle);
 
-  const interpolatedFrames: OrbitalFrame[] = [];
-
-  for (let i = 0; i < allFrames.length; i++) {
-    const current = allFrames[i];
-    const next = allFrames[(i + 1) % allFrames.length];
-
-    // Calculate midpoint angle
-    let midAngle: number;
-    if (i === allFrames.length - 1) {
-      // Last frame wraps to first (315° to 0° = 337.5°)
-      midAngle = (current.angle + 360) / 2;
-      if (midAngle >= 360) midAngle = (current.angle + next.angle + 360) / 2 % 360;
-    } else {
-      midAngle = (current.angle + next.angle) / 2;
-    }
-
-    try {
-      const blendedUrl = await createBlendedFrame(current.url, next.url, 0.5);
-      interpolatedFrames.push({
-        url: blendedUrl,
-        angle: midAngle,
-        pitch: 0,
-        state: 'closed' as OrbitalProductState,
-        role: 'orbital',
-        isMirrored: false,
-        isMacro: false
-      });
-    } catch (e) {
-      console.warn(`[Orbital] Failed to interpolate ${current.angle}° → ${next.angle}°`);
-    }
-  }
-
-  allFrames = [...allFrames, ...interpolatedFrames];
-  allFrames.sort((a, b) => a.angle - b.angle);
   onFrameUpdate(allFrames);
 
-  console.log(`[Orbital] === COMPLETE ===`);
-  console.log(`[Orbital] ${allFrames.length} total frames: ${allFrames.map(f => Math.round(f.angle) + '°').join(', ')}`);
+  console.log(`[Orbital] === COMPLETE: ${allFrames.length} frames ===`);
+  console.log(`[Orbital] Angles: ${allFrames.map(f => f.angle + '°').join(', ')}`);
 
   return { frames: allFrames };
 };
