@@ -958,92 +958,71 @@ const generateVirtualMacros = async (
 };
 
 // ============================================================================
-// TURNTABLE PRODUCT GRID GENERATION - Strict Consistency Engine
+// TURNTABLE PRODUCT GRID - Single Generation, 8 Angles
 // ============================================================================
 
-// Model options
 const ORBITAL_MODELS = {
-  flash: 'gemini-2.5-flash-image',      // Lower cost, good for testing
-  pro: 'gemini-3-pro-image-preview'     // Better spatial accuracy, higher cost
+  flash: 'gemini-2.5-flash-image',
+  pro: 'gemini-3-pro-image-preview'
 } as const;
 
-// Degrees for each clock position (product rotates, camera fixed)
-const CLOCK_DEGREES: Record<number, number> = {
-  12: 0,   1: 30,   2: 60,   3: 90,
-  4: 120,  5: 150,  6: 180,  7: 210,
-  8: 240,  9: 270,  10: 300, 11: 330
-};
-
 /**
- * STRICT TURNTABLE PROMPT
- * Key principles:
- * 1. Camera stays fixed, product rotates on turntable
- * 2. Every frame MUST show a different rotation angle
- * 3. Size, lighting, and centering are LOCKED constants
+ * Build prompt for 8-angle turntable grid
+ * Input: Front image (0°) + Back image (180°)
+ * Output: 4×2 grid with 8 views at 45° intervals
  */
-const buildTurntablePrompt = (
-  productName: string,
-  clockPositions: number[]
-): string => {
-  // Build angle descriptions based on what's visible at each rotation
-  const angleDescriptions = clockPositions.map(hour => {
-    const deg = CLOCK_DEGREES[hour];
-    let visible = '';
-    if (hour === 12) visible = 'front face only';
-    else if (hour === 3) visible = 'right side only';
-    else if (hour === 6) visible = 'back face only';
-    else if (hour === 9) visible = 'left side only';
-    else if (hour === 1) visible = 'front + slight right edge';
-    else if (hour === 2) visible = 'front-right corner (45° between front and right)';
-    else if (hour === 4) visible = 'right + slight back edge';
-    else if (hour === 5) visible = 'right-back corner (45° between right and back)';
-    else if (hour === 7) visible = 'back + slight left edge';
-    else if (hour === 8) visible = 'back-left corner (45° between back and left)';
-    else if (hour === 10) visible = 'left + slight front edge';
-    else if (hour === 11) visible = 'left-front corner (45° between left and front)';
-    return { hour, deg, visible };
-  });
+const buildTurntablePrompt = (productName: string): string => {
+  return `TASK: Create an 8-shot product turntable grid for "${productName}"
 
-  return `TASK: Product turntable photography grid
+INPUT IMAGES:
+• Image 1 = FRONT view (0°)
+• Image 2 = BACK view (180°)
 
-You are photographing "${productName}" on a motorized turntable. Your camera is FIXED in one position. The turntable rotates the product to show different angles.
+OUTPUT: A 4×2 grid (8 cells, 1024×512 total), clockwise rotation starting from front.
 
-OUTPUT: A 3×2 grid (6 cells).
-Total image dimensions: 1536×1024 pixels (3:2 aspect ratio).
-Each cell: 512×512 pixels.
+GRID LAYOUT (reading left-to-right, top-to-bottom):
+┌────────┬────────┬────────┬────────┐
+│ Cell 1 │ Cell 2 │ Cell 3 │ Cell 4 │
+│   0°   │  45°   │  90°   │  135°  │
+│ FRONT  │        │ RIGHT  │        │
+├────────┼────────┼────────┼────────┤
+│ Cell 5 │ Cell 6 │ Cell 7 │ Cell 8 │
+│  180°  │  225°  │  270°  │  315°  │
+│ BACK   │        │ LEFT   │        │
+└────────┴────────┴────────┴────────┘
 
-THE 6 ROTATIONS (reading left-to-right, top-to-bottom):
-${angleDescriptions.slice(0, 3).map((a, i) => `Cell ${i + 1}: Product rotated ${a.deg}° → shows ${a.visible}`).join('\n')}
-${angleDescriptions.slice(3, 6).map((a, i) => `Cell ${i + 4}: Product rotated ${a.deg}° → shows ${a.visible}`).join('\n')}
+WHAT EACH CELL SHOWS:
+• Cell 1 (0°): Front face - MATCH Image 1 exactly
+• Cell 2 (45°): Front-right corner
+• Cell 3 (90°): Right side profile
+• Cell 4 (135°): Back-right corner
+• Cell 5 (180°): Back face - MATCH Image 2 exactly
+• Cell 6 (225°): Back-left corner
+• Cell 7 (270°): Left side profile
+• Cell 8 (315°): Front-left corner
 
-LOCKED CONSTANTS (do not vary between cells):
-• Product SIZE: identical in all 6 cells, fills ~80% of cell height
-• Product POSITION: dead center of each cell, equal margins all sides
-• LIGHTING: soft diffused studio light from upper-left, no harsh shadows
-• BACKGROUND: pure flat white (#FFFFFF)
-• CAMERA: eye-level, same distance in every cell
-
-CRITICAL REQUIREMENT:
-Each cell MUST show a VISIBLY DIFFERENT angle. The product rotates 30° between adjacent cells. If cell 1 shows the front, cell 2 must show the front turning toward the right side - NOT the same front view again.
-
-Reference image shows the product from one angle. Generate the other 5 angles by rotating it on the turntable.`;
+STRICT RULES:
+• Product SIZE: identical in all 8 cells (~80% of cell height)
+• Product POSITION: centered in each cell
+• LIGHTING: consistent soft studio light, no harsh shadows
+• BACKGROUND: pure white (#FFFFFF)
+• Each cell shows a DIFFERENT 45° rotation - no duplicates`;
 };
 
 /**
- * Slice a 3×2 turntable grid into 6 frames
- * Grid: 1536×1024 total, each cell 512×512
+ * Slice 4×2 grid into 8 frames
+ * Grid: 1024×512 total, each cell 256×256 (token efficient)
  */
 const sliceTurntableGrid = async (base64Image: string): Promise<string[]> => {
-  const GRID_W = 1536;
-  const GRID_H = 1024;
-  const CELL_SIZE = 512;
-  const COLS = 3;
+  const COLS = 4;
   const ROWS = 2;
+  const CELL_SIZE = 256;
+  const GRID_W = COLS * CELL_SIZE; // 1024
+  const GRID_H = ROWS * CELL_SIZE; // 512
 
   try {
-    const img = await loadImageWithTimeout(base64Image, 8000);
+    const img = await loadImageWithTimeout(base64Image, 10000);
 
-    // Normalize to expected grid dimensions
     const canvas = document.createElement('canvas');
     canvas.width = GRID_W;
     canvas.height = GRID_H;
@@ -1053,21 +1032,19 @@ const sliceTurntableGrid = async (base64Image: string): Promise<string[]> => {
     ctx.drawImage(img, 0, 0, img.width, img.height, 0, 0, GRID_W, GRID_H);
 
     const frames: string[] = [];
-
     for (let row = 0; row < ROWS; row++) {
       for (let col = 0; col < COLS; col++) {
         const cellCanvas = document.createElement('canvas');
         cellCanvas.width = CELL_SIZE;
         cellCanvas.height = CELL_SIZE;
         const cellCtx = cellCanvas.getContext('2d');
-
         if (cellCtx) {
           cellCtx.drawImage(
             canvas,
             col * CELL_SIZE, row * CELL_SIZE, CELL_SIZE, CELL_SIZE,
             0, 0, CELL_SIZE, CELL_SIZE
           );
-          frames.push(cellCanvas.toDataURL('image/jpeg', 0.9)); // Higher quality
+          frames.push(cellCanvas.toDataURL('image/jpeg', 0.9));
         }
       }
     }
@@ -1079,85 +1056,8 @@ const sliceTurntableGrid = async (base64Image: string): Promise<string[]> => {
 };
 
 /**
- * Generate one turntable grid (6 frames)
- * @param useProModel - Use Gemini 3 Pro for better spatial accuracy
- */
-const generateTurntableGrid = async (
-  ai: GoogleGenAI,
-  clockPositions: number[],
-  referenceImage: string,
-  productName: string,
-  seed: number,
-  useProModel: boolean = false
-): Promise<OrbitalFrame[]> => {
-
-  const model = useProModel ? ORBITAL_MODELS.pro : ORBITAL_MODELS.flash;
-  const prompt = buildTurntablePrompt(productName, clockPositions);
-  const cleanImage = referenceImage.includes('base64,')
-    ? referenceImage.split('base64,')[1]
-    : referenceImage;
-
-  console.log(`[Orbital] Model: ${model}`);
-  console.log(`[Orbital] Generating rotations: ${clockPositions.map(h => CLOCK_DEGREES[h] + '°').join(', ')}`);
-
-  try {
-    const response = await generateWithRetry(ai, {
-      model,
-      contents: {
-        parts: [
-          { inlineData: { mimeType: 'image/jpeg', data: cleanImage } },
-          { text: prompt }
-        ]
-      },
-      config: {
-        imageConfig: { aspectRatio: "3:2" },
-        seed
-      }
-    });
-
-    const candidate = response.candidates?.[0];
-    if (!candidate) throw new Error("No candidates returned from API");
-
-    let sheetBase64: string | undefined;
-    for (const part of candidate.content?.parts || []) {
-      if (part.inlineData?.data) {
-        sheetBase64 = part.inlineData.data;
-        break;
-      }
-    }
-
-    if (!sheetBase64) {
-      console.warn(`[Orbital] Grid returned no image data`);
-      return [];
-    }
-
-    const rawFrames = await sliceTurntableGrid(`data:image/jpeg;base64,${sheetBase64}`);
-
-    const frames: OrbitalFrame[] = rawFrames.map((url, i) => ({
-      url,
-      angle: CLOCK_DEGREES[clockPositions[i]],
-      pitch: 0,
-      state: 'closed' as OrbitalProductState,
-      role: 'orbital' as SheetRole,
-      isMirrored: false,
-      isMacro: false
-    }));
-
-    console.log(`[Orbital] ✓ ${frames.length} frames: ${frames.map(f => f.angle + '°').join(', ')}`);
-    return frames;
-
-  } catch (e: any) {
-    console.error(`[Orbital] Grid generation failed:`, e?.message || e);
-    return [];
-  }
-};
-
-/**
  * MAIN ORBITAL GENERATION
- * Generates 12 frames (full 360° rotation) in 2 parallel API calls
- *
- * Options:
- * - useProModel: Use Gemini 3 Pro for better spatial accuracy (higher cost)
+ * Single API call → 8 frames at 45° intervals
  */
 export const generateOrbitalFrames = async (
   imageBase64: string,
@@ -1170,42 +1070,78 @@ export const generateOrbitalFrames = async (
   const fullConfig: OrbitalConfig = { ...DEFAULT_ORBITAL_CONFIG, ...config };
   const ai = new GoogleGenAI({ apiKey: API_KEY });
   const seed = Math.floor(Math.random() * 2147483647);
+  const model = fullConfig.useProModel ? ORBITAL_MODELS.pro : ORBITAL_MODELS.flash;
 
-  const modelName = fullConfig.useProModel ? 'Gemini 3 Pro' : 'Gemini 2.5 Flash';
-  console.log(`[Orbital] === TURNTABLE GENERATION (12 rotations) ===`);
-  console.log(`[Orbital] Model: ${modelName}`);
+  console.log(`[Orbital] === TURNTABLE GENERATION ===`);
+  console.log(`[Orbital] Model: ${model}`);
   console.log(`[Orbital] Product: ${fullConfig.productName}`);
-  console.log(`[Orbital] Seed: ${seed}`);
 
-  // Two grids generated IN PARALLEL
-  // Grid A: Front half (0°, 30°, 60°, 90°, 120°, 150°)
-  // Grid B: Back half (180°, 210°, 240°, 270°, 300°, 330°)
+  const prompt = buildTurntablePrompt(fullConfig.productName);
 
-  const frontReference = imageBase64;
-  const backReference = fullConfig.backImageBase64 || imageBase64;
+  // Clean base64 data
+  const cleanFront = imageBase64.includes('base64,')
+    ? imageBase64.split('base64,')[1]
+    : imageBase64;
+  const cleanBack = fullConfig.backImageBase64?.includes('base64,')
+    ? fullConfig.backImageBase64.split('base64,')[1]
+    : fullConfig.backImageBase64 || cleanFront; // Fall back to front if no back provided
 
-  console.log("[Orbital] Starting PARALLEL generation...");
+  // Build parts: Front image, Back image, Prompt
+  const parts: any[] = [
+    { inlineData: { mimeType: 'image/jpeg', data: cleanFront } },
+    { inlineData: { mimeType: 'image/jpeg', data: cleanBack } },
+    { text: prompt }
+  ];
 
-  const [gridA, gridB] = await Promise.all([
-    generateTurntableGrid(ai, [12, 1, 2, 3, 4, 5], frontReference, fullConfig.productName, seed, fullConfig.useProModel),
-    generateTurntableGrid(ai, [6, 7, 8, 9, 10, 11], backReference, fullConfig.productName, seed + 1, fullConfig.useProModel)
-  ]);
+  try {
+    const response = await generateWithRetry(ai, {
+      model,
+      contents: { parts },
+      config: {
+        imageConfig: { aspectRatio: "2:1" }, // 4×2 grid
+        seed
+      }
+    });
 
-  let allFrames = [...gridA, ...gridB];
+    const candidate = response.candidates?.[0];
+    if (!candidate) throw new Error("No candidates returned");
 
-  if (allFrames.length === 0) {
-    throw new Error("Generation failed - no frames produced");
+    let gridBase64: string | undefined;
+    for (const part of candidate.content?.parts || []) {
+      if (part.inlineData?.data) {
+        gridBase64 = part.inlineData.data;
+        break;
+      }
+    }
+
+    if (!gridBase64) {
+      throw new Error("No image data returned");
+    }
+
+    const rawFrames = await sliceTurntableGrid(`data:image/jpeg;base64,${gridBase64}`);
+
+    // Map to angles: 0°, 45°, 90°, 135°, 180°, 225°, 270°, 315°
+    const angles = [0, 45, 90, 135, 180, 225, 270, 315];
+
+    const frames: OrbitalFrame[] = rawFrames.map((url, i) => ({
+      url,
+      angle: angles[i],
+      pitch: 0,
+      state: 'closed' as OrbitalProductState,
+      role: 'orbital' as SheetRole,
+      isMirrored: false,
+      isMacro: false
+    }));
+
+    onFrameUpdate(frames);
+
+    console.log(`[Orbital] ✓ ${frames.length} frames: ${frames.map(f => f.angle + '°').join(' → ')}`);
+    return { frames };
+
+  } catch (e: any) {
+    console.error(`[Orbital] Generation failed:`, e?.message || e);
+    throw new Error(`Generation failed: ${e?.message || 'Unknown error'}`);
   }
-
-  // Sort by angle for proper rotation sequence
-  allFrames.sort((a, b) => a.angle - b.angle);
-
-  onFrameUpdate(allFrames);
-
-  console.log(`[Orbital] === COMPLETE ===`);
-  console.log(`[Orbital] ${allFrames.length} frames: ${allFrames.map(f => f.angle + '°').join(' → ')}`);
-
-  return { frames: allFrames };
 };
 
 /**
