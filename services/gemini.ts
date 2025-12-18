@@ -972,41 +972,27 @@ const ORBITAL_MODELS = {
  * Output: 4×2 grid with 8 views at 45° intervals
  */
 const buildTurntablePrompt = (productName: string): string => {
-  return `TASK: Create an 8-shot product turntable grid for "${productName}"
+  return `Generate 8 frames of "${productName}" rotating 360 degrees, like a product spin animation.
 
-INPUT IMAGES:
-• Image 1 = FRONT view (0°)
-• Image 2 = BACK view (180°)
+I'm giving you 2 reference photos:
+- FIRST IMAGE: The front of the product (0° rotation)
+- SECOND IMAGE: The back of the product (180° rotation)
 
-OUTPUT: A 4×2 grid (8 cells, 1024×512 total), clockwise rotation starting from front.
+Create a 4×2 image grid showing the product at these 8 rotation angles:
 
-GRID LAYOUT (reading left-to-right, top-to-bottom):
-┌────────┬────────┬────────┬────────┐
-│ Cell 1 │ Cell 2 │ Cell 3 │ Cell 4 │
-│   0°   │  45°   │  90°   │  135°  │
-│ FRONT  │        │ RIGHT  │        │
-├────────┼────────┼────────┼────────┤
-│ Cell 5 │ Cell 6 │ Cell 7 │ Cell 8 │
-│  180°  │  225°  │  270°  │  315°  │
-│ BACK   │        │ LEFT   │        │
-└────────┴────────┴────────┴────────┘
+TOP ROW:    0° → 45° → 90° → 135°
+BOTTOM ROW: 180° → 225° → 270° → 315°
 
-WHAT EACH CELL SHOWS:
-• Cell 1 (0°): Front face - MATCH Image 1 exactly
-• Cell 2 (45°): Front-right corner
-• Cell 3 (90°): Right side profile
-• Cell 4 (135°): Back-right corner
-• Cell 5 (180°): Back face - MATCH Image 2 exactly
-• Cell 6 (225°): Back-left corner
-• Cell 7 (270°): Left side profile
-• Cell 8 (315°): Front-left corner
+Frame 1: Front (use first image as reference)
+Frame 2: Rotated 45° clockwise from front
+Frame 3: Right side (90°)
+Frame 4: Rotated 135°
+Frame 5: Back (use second image as reference)
+Frame 6: Rotated 225°
+Frame 7: Left side (270°)
+Frame 8: Rotated 315°
 
-STRICT RULES:
-• Product SIZE: identical in all 8 cells (~80% of cell height)
-• Product POSITION: centered in each cell
-• LIGHTING: consistent soft studio light, no harsh shadows
-• BACKGROUND: pure white (#FFFFFF)
-• Each cell shows a DIFFERENT 45° rotation - no duplicates`;
+Keep the product the same size and centered in each frame. White background. When played in sequence, it should look like the product is smoothly spinning.`;
 };
 
 /**
