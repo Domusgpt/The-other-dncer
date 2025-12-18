@@ -533,267 +533,173 @@ const constructOrbitalPrompt = (
   role: SheetRole,
   macroRegions?: string[]
 ): string => {
-  let prompt = `
-╔═══════════════════════════════════════════════════════════════════════════════╗
-║                    360° PRODUCT TURNTABLE SPRITE SHEET                        ║
-║                         EXACT SPECIFICATION v2.0                              ║
-╚═══════════════════════════════════════════════════════════════════════════════╝
-
-SUBJECT: "${productName}"
-
-┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃ OUTPUT IMAGE SPECIFICATION                                                    ┃
-┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┫
-┃ • Total Size: 1024 × 1024 pixels (EXACTLY)                                   ┃
-┃ • Grid: 4 columns × 4 rows = 16 cells                                        ┃
-┃ • Each Cell: 256 × 256 pixels (EXACTLY)                                      ┃
-┃ • Format: Single image with 16 frames arranged in grid                       ┃
-┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
-
-┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃ TECHNICAL REQUIREMENTS (MANDATORY FOR EVERY FRAME)                           ┃
-┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┫
-┃ 1. CAMERA: Fixed position, eye-level, SAME distance for ALL 16 frames       ┃
-┃ 2. LIGHTING: Soft diffused light, NO harsh shadows, IDENTICAL in all frames ┃
-┃ 3. BACKGROUND: Pure white (#FFFFFF), clean, no gradients or shadows         ┃
-┃ 4. SCALE: Object fills 80% of cell height, IDENTICAL size in all frames     ┃
-┃ 5. CENTERING: Object perfectly centered in each cell (X and Y)              ┃
-┃ 6. CONSISTENCY: Same object, same lighting, same scale, same background     ┃
-┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
-
-`;
+  let prompt = '';
 
   if (role === 'orbital') {
-    // Primary Y-axis rotation sheet - FULL 360° revolution
-    prompt += `
-╔═══════════════════════════════════════════════════════════════════════════════╗
-║  ⚠️  CRITICAL: YOU ARE GENERATING 16 DIFFERENT ROTATION ANGLES  ⚠️           ║
-╚═══════════════════════════════════════════════════════════════════════════════╝
+    // PRIMARY PROMPT - Using narrative style per Gemini best practices
+    prompt = `You are a professional product photographer creating a 360° turntable sprite sheet for "${productName}".
 
-THE CONCEPT:
-Imagine the object is placed on a turntable. The camera is fixed in one position.
-The turntable ROTATES the object 360° (one complete revolution).
-We capture 16 photographs at equal intervals as it spins.
+=== OUTPUT SPECIFICATION (EXACT) ===
+• Total image: 1024 × 1024 pixels
+• Grid layout: 4 columns × 4 rows = 16 cells
+• Each cell: 256 × 256 pixels exactly
+• Cell borders: Clean edges, no overlap between cells
+• Background: Pure white (#FFFFFF) in every cell
 
-                        CAMERA (FIXED - NEVER MOVES)
-                              │
-                              │ (always watching from here)
-                              ▼
-                    ┌─────────────────────┐
-                    │                     │
-                    │    ════════════     │
-                    │   ╱   OBJECT   ╲    │  ← Object sits on turntable
-                    │  ╱             ╲   │
-                    │ ═══════════════════ │  ← Turntable rotates ↻ clockwise
-                    │                     │
-                    └─────────────────────┘
+=== GRID STRUCTURE ===
++--------+--------+--------+--------+
+| Cell 0 | Cell 1 | Cell 2 | Cell 3 |  ← Row 0 (top)
+| 0°     | 22°    | 45°    | 67°    |
++--------+--------+--------+--------+
+| Cell 4 | Cell 5 | Cell 6 | Cell 7 |  ← Row 1
+| 90°    | 112°   | 135°   | 157°   |
++--------+--------+--------+--------+
+| Cell 8 | Cell 9 | Cell10 | Cell11 |  ← Row 2
+| 180°   | 202°   | 225°   | 247°   |
++--------+--------+--------+--------+
+| Cell12 | Cell13 | Cell14 | Cell15 |  ← Row 3 (bottom)
+| 270°   | 292°   | 315°   | 337°   |
++--------+--------+--------+--------+
 
-RESULT: 16 frames showing the object from 16 different angles around it.
+=== THE TURNTABLE CONCEPT ===
+Imagine the product sits on a rotating turntable. You stand in one fixed position with your camera. The turntable spins the product 360° while you take 16 photographs at equal 22.5° intervals. Each photo shows the product from a progressively different angle.
 
-┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃ THE 16 ROTATION ANGLES (READ LEFT→RIGHT, TOP→BOTTOM)                         ┃
-┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+=== WHAT EACH CELL MUST SHOW ===
 
-╔══════════╦══════════╦══════════╦══════════╗
-║   CELL   ║   CELL   ║   CELL   ║   CELL   ║
-║    0     ║    1     ║    2     ║    3     ║  ROW 1
-║  ┌───┐   ║  ┌───┐   ║  ┌───┐   ║  ┌───┐   ║
-║  │ F │   ║  │/F │   ║  │ / │   ║  │  /│   ║  F=Front visible
-║  │ R │   ║  │ R │   ║  │ R │   ║  │ R │   ║  R=Right emerging
-║  │ O │   ║  │ O │   ║  │ O │   ║  │ O │   ║
-║  │ N │   ║  │ N │   ║  │ N │   ║  │ N │   ║
-║  │ T │   ║  │ T │   ║  │ T │   ║  │ T │   ║
-║  └───┘   ║  └───┘   ║  └───┘   ║  └───┘   ║
-║   0°     ║   22°    ║   45°    ║   67°    ║
-║ (FRONT)  ║          ║          ║          ║
-╠══════════╬══════════╬══════════╬══════════╣
-║   CELL   ║   CELL   ║   CELL   ║   CELL   ║
-║    4     ║    5     ║    6     ║    7     ║  ROW 2
-║  ┌───┐   ║  ┌───┐   ║  ┌───┐   ║  ┌───┐   ║
-║  │   │   ║  │   │   ║  │   │   ║  │   │   ║
-║  │ R │   ║  │ R/│   ║  │  /│   ║  │  B│   ║  R=Right, B=Back emerging
-║  │ I │   ║  │ I │   ║  │ B │   ║  │ A │   ║
-║  │ G │   ║  │ G │   ║  │ A │   ║  │ C │   ║
-║  │ H │   ║  │ H │   ║  │ C │   ║  │ K │   ║
-║  │ T │   ║  │ T │   ║  │ K │   ║  │   │   ║
-║  └───┘   ║  └───┘   ║  └───┘   ║  └───┘   ║
-║   90°    ║   112°   ║   135°   ║   157°   ║
-║ (RIGHT)  ║          ║          ║          ║
-╠══════════╬══════════╬══════════╬══════════╣
-║   CELL   ║   CELL   ║   CELL   ║   CELL   ║
-║    8     ║    9     ║   10     ║   11     ║  ROW 3
-║  ┌───┐   ║  ┌───┐   ║  ┌───┐   ║  ┌───┐   ║
-║  │ B │   ║  │B/ │   ║  │ / │   ║  │  /│   ║
-║  │ A │   ║  │A  │   ║  │ L │   ║  │ L │   ║  B=Back, L=Left emerging
-║  │ C │   ║  │C  │   ║  │ E │   ║  │ E │   ║
-║  │ K │   ║  │K  │   ║  │ F │   ║  │ F │   ║
-║  │   │   ║  │   │   ║  │ T │   ║  │ T │   ║
-║  └───┘   ║  └───┘   ║  └───┘   ║  └───┘   ║
-║   180°   ║   202°   ║   225°   ║   247°   ║
-║ (BACK)   ║          ║          ║          ║
-╠══════════╬══════════╬══════════╬══════════╣
-║   CELL   ║   CELL   ║   CELL   ║   CELL   ║
-║   12     ║   13     ║   14     ║   15     ║  ROW 4
-║  ┌───┐   ║  ┌───┐   ║  ┌───┐   ║  ┌───┐   ║
-║  │ L │   ║  │L/ │   ║  │ / │   ║  │  /│   ║
-║  │ E │   ║  │E  │   ║  │ F │   ║  │ F │   ║  L=Left, F=Front returning
-║  │ F │   ║  │F  │   ║  │ R │   ║  │ R │   ║
-║  │ T │   ║  │T  │   ║  │ O │   ║  │ O │   ║
-║  │   │   ║  │   │   ║  │ N │   ║  │ N │   ║
-║  └───┘   ║  └───┘   ║  └───┘   ║  └───┘   ║
-║   270°   ║   292°   ║   315°   ║   337°   ║
-║ (LEFT)   ║          ║          ║          ║
-╚══════════╩══════════╩══════════╩══════════╝
+Row 0 (Front quarter):
+• Cell 0 (0°): FRONT - Product facing camera directly, showing its front face
+• Cell 1 (22°): Product rotated 22° clockwise, slight right edge now visible
+• Cell 2 (45°): Corner view - equal parts front and right side visible
+• Cell 3 (67°): Mostly right side, small portion of front still visible
 
-EXPLICIT FRAME DESCRIPTIONS:
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-FRAME 0  (0°):   FRONT - Full frontal view, object facing camera directly
-FRAME 1  (22°):  Object rotated 22° clockwise, slight right side visible
-FRAME 2  (45°):  Object rotated 45°, equal parts front and right visible
-FRAME 3  (67°):  Object rotated 67°, mostly right side, corner of front visible
-FRAME 4  (90°):  RIGHT - Perfect side profile, object's right side to camera
-FRAME 5  (112°): Object rotated 112°, right side with back corner appearing
-FRAME 6  (135°): Object rotated 135°, equal parts right and back visible
-FRAME 7  (157°): Object rotated 157°, mostly back, corner of right visible
-FRAME 8  (180°): BACK - Full rear view, object's back facing camera
-FRAME 9  (202°): Object rotated 202°, back with left side emerging
-FRAME 10 (225°): Object rotated 225°, equal parts back and left visible
-FRAME 11 (247°): Object rotated 247°, mostly left side, corner of back visible
-FRAME 12 (270°): LEFT - Perfect side profile, object's left side to camera
-FRAME 13 (292°): Object rotated 292°, left side with front corner appearing
-FRAME 14 (315°): Object rotated 315°, equal parts left and front visible
-FRAME 15 (337°): Object rotated 337°, mostly front, corner of left visible
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Row 1 (Right to back):
+• Cell 4 (90°): RIGHT - Pure side profile, product's right side facing camera
+• Cell 5 (112°): Right side dominant, back edge beginning to appear
+• Cell 6 (135°): Corner view - equal parts right side and back visible
+• Cell 7 (157°): Mostly back, small portion of right side still visible
 
-⛔ FAILURE CONDITIONS (DO NOT DO THESE):
-• DO NOT generate 16 copies of the same angle
-• DO NOT vary the lighting between frames
-• DO NOT change the object's size between frames
-• DO NOT add shadows or reflections
-• DO NOT change the camera distance or height
-• DO NOT skip any rotation angles
+Row 2 (Back quarter):
+• Cell 8 (180°): BACK - Product's back facing camera directly (opposite of Cell 0)
+• Cell 9 (202°): Back dominant, left edge beginning to appear
+• Cell 10 (225°): Corner view - equal parts back and left side visible
+• Cell 11 (247°): Mostly left side, small portion of back still visible
 
-✅ SUCCESS CRITERIA:
-• Each frame shows the object from a DIFFERENT angle
-• When animated in sequence, object appears to spin smoothly
-• All 16 frames have IDENTICAL lighting, scale, and background
-• Clear visual difference between adjacent frames (22° rotation each)
-`;
+Row 3 (Left returning to front):
+• Cell 12 (270°): LEFT - Pure side profile, product's left side facing camera (opposite of Cell 4)
+• Cell 13 (292°): Left side dominant, front edge returning into view
+• Cell 14 (315°): Corner view - equal parts left side and front visible
+• Cell 15 (337°): Mostly front, small portion of left side visible (almost back to Cell 0)
+
+=== CONSISTENCY REQUIREMENTS ===
+• Product CENTERED in every cell (equal margins all around)
+• Product fills ~80% of cell height, SAME SIZE in all 16 cells
+• IDENTICAL lighting in all cells (soft, diffused, no harsh shadows)
+• Camera distance and height NEVER change - only the product rotates
+• No shadows, reflections, or gradients on background
+
+=== SUCCESS TEST ===
+When the 16 cells are played as an animation sequence, the product appears to smoothly spin 360° like a turntable video. Cell 0 and Cell 8 show opposite sides. Cell 4 and Cell 12 show opposite profiles.`;
+
   } else if (role === 'orbital_pitch') {
-    // Elevation/pitch views
-    prompt += `═══════════════════════════════════════════════════════════════════
-PITCH/ELEVATION VIEWS (The Inspection Angles)
-═══════════════════════════════════════════════════════════════════
-Generate 16 frames showing the subject from various vertical angles.
+    // Elevation/pitch views - simplified
+    prompt = `You are a professional product photographer creating elevation angle views.
 
-GRID LAYOUT WITH PITCH ANGLES:
-┌─────────┬─────────┬─────────┬─────────┐
-│  0° EL  │  15° DN │  30° DN │  45° DN │  ← Row 1 (Looking Down)
-│ (LEVEL) │         │         │         │
-├─────────┼─────────┼─────────┼─────────┤
-│  60° DN │  90° DN │  15° UP │  30° UP │  ← Row 2 (Extreme Angles)
-│         │ (TOP)   │         │         │
-├─────────┼─────────┼─────────┼─────────┤
-│ FRONT@  │ FRONT@  │ FRONT@  │ FRONT@  │  ← Row 3 (Front View + Pitch)
-│ 0° EL   │ 30° DN  │ 60° DN  │ 30° UP  │
-├─────────┼─────────┼─────────┼─────────┤
-│ SIDE@   │ SIDE@   │ SIDE@   │ SIDE@   │  ← Row 4 (Side View + Pitch)
-│ 0° EL   │ 30° DN  │ 60° DN  │ 30° UP  │
-└─────────┴─────────┴─────────┴─────────┘
+TASK: Create a single 1024×1024 pixel image containing a 4×4 grid (16 cells, each 256×256 pixels) showing "${productName}" photographed from 16 different vertical angles.
 
-ELEVATION DIAGRAM:
-                    90° DOWN (Bird's Eye)
-                          ↑
-                    ┌─────┴─────┐
-                    │   TOP     │
-              45°   │           │
-                ↘   │           │
-          0° ───────┤  SUBJECT  ├─────── 0° (Eye Level)
-                ↗   │           │
-              45°   │           │
-                    │  BOTTOM   │
-                    └─────┬─────┘
-                          ↓
-                    90° UP (Worm's Eye)
+THE SETUP:
+The product stays in one position. You move your camera UP and DOWN to capture different elevation angles - from directly above (bird's eye) to eye level to slightly below.
 
-DN = Looking Down (camera above subject)
-UP = Looking Up (camera below subject)
-EL = Elevation angle from eye-level
-`;
+THE 16 PHOTOGRAPHS (reading left-to-right, top-to-bottom):
+
+Row 1 - Looking down at various angles:
+• Cell 1: Eye level (0°) - Camera at product height
+• Cell 2: Slight down (15°) - Camera slightly above
+• Cell 3: Angled down (30°) - Camera notably above
+• Cell 4: Steep down (45°) - Camera high above
+
+Row 2 - Extreme and upward angles:
+• Cell 5: Very steep (60°) - Almost overhead
+• Cell 6: Bird's eye (90°) - Directly above, looking straight down
+• Cell 7: Slight up (15°) - Camera slightly below product
+• Cell 8: Angled up (30°) - Camera below, looking up
+
+Row 3 - Front view at different pitches:
+• Cell 9-12: Front view at 0°, 30° down, 60° down, 30° up
+
+Row 4 - Side view at different pitches:
+• Cell 13-16: Side view at 0°, 30° down, 60° down, 30° up
+
+REQUIREMENTS:
+• Product centered and same size in every cell
+• Pure white background
+• Soft, consistent lighting
+• Clear difference in camera elevation between cells`;
+
   } else if (role === 'orbital_states') {
-    // Functional states
-    prompt += `═══════════════════════════════════════════════════════════════════
-FUNCTIONAL STATES (Product Configurations)
-═══════════════════════════════════════════════════════════════════
-Generate 16 frames showing the subject in various functional states.
+    // Functional states - simplified
+    prompt = `You are a professional product photographer capturing functional states.
 
-GRID LAYOUT WITH STATES:
-┌─────────┬─────────┬─────────┬─────────┐
-│ CLOSED  │  OPEN   │ TRANSIT │  ALT    │  ← Row 1 (Primary States)
-│(Default)│(Active) │(Between)│ (Mode)  │
-├─────────┼─────────┼─────────┼─────────┤
-│EXPLODED │ASSEMBLED│PACKAGED │UNBOXING │  ← Row 2 (Detail States)
-│         │         │         │         │
-├─────────┼─────────┼─────────┼─────────┤
-│ IN-HAND │ON-SURF  │W/ACCESS │ STYLED  │  ← Row 3 (Lifestyle)
-│         │         │         │         │
-├─────────┼─────────┼─────────┼─────────┤
-│VARIANT 1│VARIANT 2│VARIANT 3│VARIANT 4│  ← Row 4 (Color/Size Variants)
-└─────────┴─────────┴─────────┴─────────┘
+TASK: Create a single 1024×1024 pixel image containing a 4×4 grid (16 cells, each 256×256 pixels) showing "${productName}" in 16 different configurations or states.
 
-FRAME BREAKDOWN:
-Row 1 (Primary States):
-  • Frame 0:  CLOSED/INACTIVE - Default product appearance
-  • Frame 1:  OPEN/ACTIVE - Product in use position
-  • Frame 2:  TRANSITIONAL - Between open and closed
-  • Frame 3:  ALTERNATE CONFIG - Different usage mode
+THE 16 STATES (reading left-to-right, top-to-bottom):
 
-Row 2 (Detail States):
-  • Frame 4:  EXPLODED VIEW - Components separated
-  • Frame 5:  ASSEMBLED VIEW - All parts connected
-  • Frame 6:  PACKAGING VIEW - Product in box/packaging
-  • Frame 7:  UNBOXING VIEW - Partially revealed
+Row 1 - Primary operational states:
+• Cell 1: Closed/default state
+• Cell 2: Open/active state
+• Cell 3: Transitioning between states
+• Cell 4: Alternate configuration
 
-Row 3 (Lifestyle/Context):
-  • Frame 8:  IN-HAND - Human hand holding product
-  • Frame 9:  ON-SURFACE - Product on clean surface
-  • Frame 10: WITH-ACCESSORY - With companion item
-  • Frame 11: STYLED - Lifestyle/marketing composition
+Row 2 - Assembly views:
+• Cell 5: Exploded view (parts separated)
+• Cell 6: Fully assembled
+• Cell 7: In packaging
+• Cell 8: Being unboxed
 
-Row 4 (Variants):
-  • Frame 12-15: Color/size variants or additional configurations
-`;
+Row 3 - Context/lifestyle:
+• Cell 9: Held in hand
+• Cell 10: On a surface
+• Cell 11: With accessories
+• Cell 12: Styled/marketing shot
+
+Row 4 - Variants:
+• Cell 13-16: Color or size variants
+
+REQUIREMENTS:
+• Each cell shows a distinctly different state or configuration
+• Consistent lighting and white background
+• Product clearly visible in each cell`;
+
   } else if (role === 'orbital_macro') {
-    // Macro/detail shots
-    const regions = macroRegions?.join(', ') || 'texture, logo, key features, material';
-    prompt += `═══════════════════════════════════════════════════════════════════
-MACRO DETAIL VIEWS (Virtual Macro Lens)
-═══════════════════════════════════════════════════════════════════
-Generate 16 extreme close-up frames showing fine details.
+    // Macro/detail shots - simplified
+    const regions = macroRegions?.join(', ') || 'texture, logo, key features';
+    prompt = `You are a macro product photographer capturing fine details.
 
-FOCUS REGIONS: ${regions}
+TASK: Create a single 1024×1024 pixel image containing a 4×4 grid (16 cells, each 256×256 pixels) showing extreme close-ups of "${productName}" details.
 
-GRID LAYOUT WITH DETAIL TYPES:
-┌─────────┬─────────┬─────────┬─────────┐
-│ TEXTURE │  LOGO   │FEATURE 1│FEATURE 2│  ← Row 1 (Primary Details)
-│(Surface)│(Brand)  │(Button) │(Port)   │
-├─────────┼─────────┼─────────┼─────────┤
-│STITCHING│HARDWARE │ INNER   │  EDGE   │  ← Row 2 (Craftsmanship)
-│ (Seams) │(Metal)  │(Lining) │(Corners)│
-├─────────┼─────────┼─────────┼─────────┤
-│TEXTURE  │ LOGO    │FEATURE 1│FEATURE 2│  ← Row 3 (Alt Angles)
-│  @45°   │  @45°   │  @45°   │  @45°   │
-├─────────┼─────────┼─────────┼─────────┤
-│STITCHING│HARDWARE │ INNER   │  EDGE   │  ← Row 4 (Alt Angles)
-│  @45°   │  @45°   │  @45°   │  @45°   │
-└─────────┴─────────┴─────────┴─────────┘
+FOCUS AREAS: ${regions}
 
-MACRO REQUIREMENTS:
-• Fill 90% of frame with detail area
-• Sharp focus on surface texture/material
-• Visible material grain, stitching, finish quality
-• Professional product photography lighting
-`;
+THE 16 DETAIL SHOTS (reading left-to-right, top-to-bottom):
+
+Row 1 - Primary details:
+• Cell 1: Surface texture (fill 90% of frame)
+• Cell 2: Logo/branding close-up
+• Cell 3: Key feature #1
+• Cell 4: Key feature #2
+
+Row 2 - Craftsmanship:
+• Cell 5: Stitching/seams/joints
+• Cell 6: Hardware/metal parts
+• Cell 7: Interior/lining
+• Cell 8: Edges/corners
+
+Row 3 - Alternate angles of Row 1 details (45° different angle)
+Row 4 - Alternate angles of Row 2 details (45° different angle)
+
+REQUIREMENTS:
+• Each detail fills 90% of its cell
+• Sharp focus revealing material quality
+• Consistent soft lighting
+• Show texture, grain, and finish quality`;
   }
 
   return prompt;
