@@ -84,6 +84,7 @@ export const OrbitalViewer: React.FC<OrbitalViewerProps> = ({
   // Current display state
   const [displayAngle, setDisplayAngle] = useState(0);
   const [currentFrame, setCurrentFrame] = useState<OrbitalFrame | null>(null);
+  const currentFrameRef = useRef<OrbitalFrame | null>(null); // Ref for animation loop (avoids stale closure)
   const [isAutoRotating, setIsAutoRotating] = useState(false);
   const [showMacroPanel, setShowMacroPanel] = useState(false);
   const [selectedMacro, setSelectedMacro] = useState<string | null>(null);
@@ -203,17 +204,19 @@ export const OrbitalViewer: React.FC<OrbitalViewerProps> = ({
 
   /**
    * Trigger a transition between frames
+   * Uses ref to avoid stale closure issues in animation loop
    */
   const triggerTransition = useCallback((newFrame: OrbitalFrame, mode: TransitionMode = 'CUT') => {
-    if (!currentFrame || newFrame === currentFrame) return;
+    const current = currentFrameRef.current;
+    if (!current || newFrame === current) return;
 
     transitionRef.current = {
-      sourceFrame: currentFrame,
+      sourceFrame: current,
       targetFrame: newFrame,
       progress: 0,
       mode,
     };
-  }, [currentFrame]);
+  }, []);
 
   /**
    * MAIN RENDER LOOP
@@ -247,13 +250,17 @@ export const OrbitalViewer: React.FC<OrbitalViewerProps> = ({
       ? frames.find(f => f.isMacro && f.macroRegion === selectedMacro)
       : quantizeAngleToFrame(angle, frames, { role: 'orbital' });
 
-    if (newFrame && newFrame !== currentFrame) {
+    // Use ref for comparison to avoid stale closure issues
+    if (newFrame && newFrame !== currentFrameRef.current) {
       // Log frame change for debugging
-      console.log(`[OrbitalViewer] Frame change: ${currentFrame?.angle}° → ${newFrame.angle}° (display: ${Math.round(angle)}°)`);
+      console.log(`[OrbitalViewer] Frame change: ${currentFrameRef.current?.angle}° → ${newFrame.angle}° (display: ${Math.round(angle)}°)`);
 
       // Determine transition mode based on velocity
       const mode: TransitionMode = Math.abs(physicsRef.current.angularVelocity) > 50 ? 'CUT' : 'BLEND';
       triggerTransition(newFrame, mode);
+
+      // Update both ref (for animation loop) and state (for React)
+      currentFrameRef.current = newFrame;
       setCurrentFrame(newFrame);
     }
 
@@ -272,6 +279,7 @@ export const OrbitalViewer: React.FC<OrbitalViewerProps> = ({
 
     // Draw frames with interpolation
     const transition = transitionRef.current;
+    const frameToRender = currentFrameRef.current; // Use ref to get current frame
 
     if (enableInterpolation && transition.progress < 1.0 && transition.sourceFrame && transition.targetFrame) {
       const sourceImg = getFrameImage(transition.sourceFrame);
@@ -290,8 +298,8 @@ export const OrbitalViewer: React.FC<OrbitalViewerProps> = ({
 
         ctx.globalAlpha = 1;
       }
-    } else if (currentFrame) {
-      const img = getFrameImage(currentFrame);
+    } else if (frameToRender) {
+      const img = getFrameImage(frameToRender);
       if (img && img.complete && img.naturalWidth > 0) {
         drawFrame(ctx, img, w, h);
       }
@@ -305,7 +313,7 @@ export const OrbitalViewer: React.FC<OrbitalViewerProps> = ({
       ctx.fillText(`${Math.round(angle)}°`, w / 2, h - 20);
     }
 
-  }, [frames, currentFrame, isAutoRotating, updatePhysics, onAngleChange, enableInterpolation, getFrameImage, triggerTransition, selectedMacro]);
+  }, [frames, isAutoRotating, updatePhysics, onAngleChange, enableInterpolation, getFrameImage, triggerTransition, selectedMacro]);
 
   /**
    * Draw a frame centered in the canvas
@@ -329,9 +337,13 @@ export const OrbitalViewer: React.FC<OrbitalViewerProps> = ({
   // Start render loop
   useEffect(() => {
     if (imagesLoaded && frames.length > 0) {
-      // Initialize with first frame
+      // Initialize with first frame - set both ref and state
       const initialFrame = quantizeAngleToFrame(0, frames, { role: 'orbital' });
-      if (initialFrame) setCurrentFrame(initialFrame);
+      if (initialFrame) {
+        currentFrameRef.current = initialFrame;
+        setCurrentFrame(initialFrame);
+        console.log(`[OrbitalViewer] Initialized with frame at ${initialFrame.angle}°`);
+      }
 
       requestRef.current = requestAnimationFrame(renderLoop);
     }
