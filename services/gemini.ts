@@ -958,8 +958,202 @@ const generateVirtualMacros = async (
 };
 
 /**
- * MAIN ORBITAL GENERATION FUNCTION
- * Orchestrates the full Turn-Table sprite sheet generation pipeline
+ * SIMPLIFIED HEMISPHERE PROMPT
+ * Generates only 4 frames (2x2 grid) for better AI accuracy
+ */
+const constructHemispherePrompt = (
+  productName: string,
+  hemisphere: 'front' | 'back'
+): string => {
+  const isFront = hemisphere === 'front';
+
+  return `You are a professional product photographer creating a turntable rotation for "${productName}".
+
+OUTPUT: Create a single 512×512 pixel image with a 2×2 grid (4 cells, each 256×256 pixels).
+
+THE SETUP:
+The product sits on a turntable. Your camera stays fixed. The turntable rotates the product.
+You are photographing the ${isFront ? 'FRONT half' : 'BACK half'} of the rotation (${isFront ? '0° to 135°' : '180° to 315°'}).
+
+THE 4 PHOTOGRAPHS:
++------------------+------------------+
+|     Cell 0       |     Cell 1       |
+| ${isFront ? '0° FRONT VIEW' : '180° BACK VIEW'}    | ${isFront ? '45° CORNER' : '225° CORNER'}        |
+| ${isFront ? 'Product facing you' : 'Product back to you'} | ${isFront ? 'Front + right side' : 'Back + left side'}   |
++------------------+------------------+
+|     Cell 2       |     Cell 3       |
+| ${isFront ? '90° RIGHT SIDE' : '270° LEFT SIDE'}   | ${isFront ? '135° CORNER' : '315° CORNER'}       |
+| ${isFront ? 'Pure side profile' : 'Pure side profile'} | ${isFront ? 'Right + back' : 'Left + front'}        |
++------------------+------------------+
+
+CRITICAL REQUIREMENTS:
+• Each cell shows the product from a DIFFERENT angle (45° apart)
+• Product stays CENTERED and SAME SIZE in all 4 cells
+• Pure white background (#FFFFFF)
+• Identical soft lighting in all cells
+• NO shadows on background
+
+The reference image shows the ${isFront ? 'front (0°)' : 'back (180°)'} view. Generate all 4 angles from that reference.`;
+};
+
+/**
+ * Generate interpolated frame between two frames using canvas blend
+ */
+const createBlendedFrame = (frame1Url: string, frame2Url: string, t: number = 0.5): Promise<string> => {
+  return new Promise(async (resolve, reject) => {
+    try {
+      const [img1, img2] = await Promise.all([
+        loadImageWithTimeout(frame1Url, 5000),
+        loadImageWithTimeout(frame2Url, 5000)
+      ]);
+
+      const canvas = document.createElement('canvas');
+      canvas.width = 256;
+      canvas.height = 256;
+      const ctx = canvas.getContext('2d');
+
+      if (!ctx) { reject("Canvas context failed"); return; }
+
+      // Draw first frame
+      ctx.globalAlpha = 1 - t;
+      ctx.drawImage(img1, 0, 0, 256, 256);
+
+      // Blend second frame on top
+      ctx.globalAlpha = t;
+      ctx.drawImage(img2, 0, 0, 256, 256);
+
+      ctx.globalAlpha = 1;
+      resolve(canvas.toDataURL('image/jpeg', 0.85));
+    } catch (e) {
+      console.error("Blend frame failed", e);
+      reject(e);
+    }
+  });
+};
+
+/**
+ * Slice a 2x2 sprite sheet into 4 frames
+ */
+const sliceHemisphereSheet = (base64Image: string): Promise<string[]> => {
+  return new Promise(async (resolve, reject) => {
+    try {
+      const img = await loadImageWithTimeout(base64Image, 8000);
+
+      const normCanvas = document.createElement('canvas');
+      normCanvas.width = 512;
+      normCanvas.height = 512;
+      const normCtx = normCanvas.getContext('2d');
+
+      if (!normCtx) { reject("Canvas context failed"); return; }
+
+      // Stretch to fit 512x512
+      normCtx.drawImage(img, 0, 0, img.width, img.height, 0, 0, 512, 512);
+
+      const frames: string[] = [];
+      const CELL_SIZE = 256;
+
+      // 2x2 grid = 4 cells
+      for (let row = 0; row < 2; row++) {
+        for (let col = 0; col < 2; col++) {
+          const cellCanvas = document.createElement('canvas');
+          cellCanvas.width = CELL_SIZE;
+          cellCanvas.height = CELL_SIZE;
+          const cellCtx = cellCanvas.getContext('2d');
+
+          if (cellCtx) {
+            cellCtx.drawImage(
+              normCanvas,
+              col * CELL_SIZE, row * CELL_SIZE, CELL_SIZE, CELL_SIZE,
+              0, 0, CELL_SIZE, CELL_SIZE
+            );
+            frames.push(cellCanvas.toDataURL('image/jpeg', 0.85));
+          }
+        }
+      }
+      resolve(frames);
+    } catch (e) {
+      console.error("Slice hemisphere sheet failed", e);
+      reject(e);
+    }
+  });
+};
+
+/**
+ * Generate a single hemisphere (front or back) - 4 frames
+ */
+const generateHemisphere = async (
+  ai: GoogleGenAI,
+  hemisphere: 'front' | 'back',
+  referenceImageBase64: string,
+  productName: string,
+  seed: number
+): Promise<OrbitalFrame[]> => {
+
+  const prompt = constructHemispherePrompt(productName, hemisphere);
+  const cleanImage = referenceImageBase64.includes('base64,')
+    ? referenceImageBase64.split('base64,')[1]
+    : referenceImageBase64;
+
+  console.log(`[Orbital] Generating ${hemisphere} hemisphere (4 frames)...`);
+
+  try {
+    const response = await generateWithRetry(ai, {
+      model: 'gemini-2.5-flash-preview-05-20',
+      contents: {
+        parts: [
+          { inlineData: { mimeType: 'image/jpeg', data: cleanImage } },
+          { text: prompt }
+        ]
+      },
+      config: {
+        responseModalities: ['image', 'text'],
+        seed: seed
+      }
+    });
+
+    const candidate = response.candidates?.[0];
+    if (!candidate) throw new Error("No candidates returned");
+
+    let sheetBase64: string | undefined;
+    if (candidate.content?.parts) {
+      for (const part of candidate.content.parts) {
+        if (part.inlineData?.data) {
+          sheetBase64 = part.inlineData.data;
+          break;
+        }
+      }
+    }
+
+    if (!sheetBase64) {
+      console.warn(`[Orbital] ${hemisphere} hemisphere returned no image`);
+      return [];
+    }
+
+    const rawFrames = await sliceHemisphereSheet(`data:image/jpeg;base64,${sheetBase64}`);
+    const baseAngle = hemisphere === 'front' ? 0 : 180;
+
+    const frames: OrbitalFrame[] = rawFrames.map((url, i) => ({
+      url,
+      angle: baseAngle + (i * 45), // 0,45,90,135 or 180,225,270,315
+      pitch: 0,
+      state: 'closed' as OrbitalProductState,
+      role: 'orbital' as SheetRole,
+      isMirrored: false,
+      isMacro: false
+    }));
+
+    console.log(`[Orbital] ${hemisphere}: ${frames.length} frames at ${frames.map(f => f.angle + '°').join(', ')}`);
+    return frames;
+
+  } catch (e) {
+    console.error(`[Orbital] ${hemisphere} generation failed:`, e);
+    return [];
+  }
+};
+
+/**
+ * SIMPLIFIED ORBITAL GENERATION
+ * Two-hemisphere approach: Front (0-135°) + Back (180-315°) + Interpolation
  */
 export const generateOrbitalFrames = async (
   imageBase64: string,
@@ -967,123 +1161,83 @@ export const generateOrbitalFrames = async (
   onFrameUpdate: (frames: OrbitalFrame[]) => void
 ): Promise<{ frames: OrbitalFrame[] }> => {
 
-  // Validate API key before attempting generation
   validateApiKey();
 
   const fullConfig: OrbitalConfig = { ...DEFAULT_ORBITAL_CONFIG, ...config };
   const ai = new GoogleGenAI({ apiKey: API_KEY });
+  const seed = Math.floor(Math.random() * 2147483647);
 
-  const masterSeed = Math.floor(Math.random() * 2147483647);
-  console.log("[Orbital] Master Seed for Consistency:", masterSeed);
+  console.log("[Orbital] === SIMPLIFIED 2-HEMISPHERE GENERATION ===");
+  console.log("[Orbital] Seed:", seed);
 
   let allFrames: OrbitalFrame[] = [];
-  let baseSheetBase64: string | undefined = undefined;
 
-  // 1. GENERATE PRIMARY ROTATION SHEET (Y-Axis: 0° to 90°)
-  console.log("[Orbital] Generating primary rotation sheet...");
-  const baseResult = await generateSingleOrbitalSheet(
-    ai,
-    'orbital',
-    imageBase64,
-    fullConfig,
-    masterSeed
-  );
+  // 1. GENERATE FRONT HEMISPHERE (0°, 45°, 90°, 135°)
+  const frontFrames = await generateHemisphere(ai, 'front', imageBase64, fullConfig.productName, seed);
 
-  if (baseResult.frames.length > 0) {
-    allFrames = [...allFrames, ...baseResult.frames];
-    baseSheetBase64 = baseResult.rawSheetBase64;
-    onFrameUpdate(allFrames);
-  } else {
-    throw new Error("Primary orbital generation failed. Aborting.");
+  if (frontFrames.length === 0) {
+    throw new Error("Front hemisphere generation failed.");
   }
 
-  // 2. HEMISPHERE COMPLETION (Mirror 0-90° to get 270-360°)
-  if (fullConfig.enableHemisphereCompletion) {
-    console.log("[Orbital] Completing hemisphere via mirroring...");
-    allFrames = await completeHemisphere(allFrames);
+  allFrames = [...frontFrames];
+  onFrameUpdate(allFrames);
+
+  // 2. GENERATE BACK HEMISPHERE (180°, 225°, 270°, 315°)
+  const backReference = fullConfig.backImageBase64 || imageBase64;
+  await delay(500); // Brief pause between API calls
+
+  const backFrames = await generateHemisphere(ai, 'back', backReference, fullConfig.productName, seed);
+
+  if (backFrames.length > 0) {
+    allFrames = [...allFrames, ...backFrames];
     onFrameUpdate(allFrames);
   }
 
-  // 3. GENERATE PITCH/ELEVATION VIEWS (Optional)
-  if (fullConfig.enablePitchViews) {
-    console.log("[Orbital] Generating pitch/elevation views...");
-    await delay(100);
+  // 3. CREATE INTERPOLATED FRAMES (22.5°, 67.5°, etc.)
+  console.log("[Orbital] Creating interpolated in-between frames...");
+
+  // Sort by angle first
+  allFrames.sort((a, b) => a.angle - b.angle);
+
+  const interpolatedFrames: OrbitalFrame[] = [];
+
+  for (let i = 0; i < allFrames.length; i++) {
+    const current = allFrames[i];
+    const next = allFrames[(i + 1) % allFrames.length];
+
+    // Calculate midpoint angle
+    let midAngle: number;
+    if (i === allFrames.length - 1) {
+      // Last frame wraps to first (315° to 0° = 337.5°)
+      midAngle = (current.angle + 360) / 2;
+      if (midAngle >= 360) midAngle = (current.angle + next.angle + 360) / 2 % 360;
+    } else {
+      midAngle = (current.angle + next.angle) / 2;
+    }
+
     try {
-      const pitchResult = await generateSingleOrbitalSheet(
-        ai,
-        'orbital_pitch',
-        imageBase64,
-        fullConfig,
-        masterSeed,
-        baseSheetBase64
-      );
-      if (pitchResult.frames.length > 0) {
-        allFrames = [...allFrames, ...pitchResult.frames];
-        onFrameUpdate(allFrames);
-      }
+      const blendedUrl = await createBlendedFrame(current.url, next.url, 0.5);
+      interpolatedFrames.push({
+        url: blendedUrl,
+        angle: midAngle,
+        pitch: 0,
+        state: 'closed' as OrbitalProductState,
+        role: 'orbital',
+        isMirrored: false,
+        isMacro: false
+      });
     } catch (e) {
-      console.warn("[Orbital] Pitch sheet generation failed:", e);
+      console.warn(`[Orbital] Failed to interpolate ${current.angle}° → ${next.angle}°`);
     }
   }
 
-  // 4. GENERATE FUNCTIONAL STATES (Optional)
-  if (fullConfig.enableFunctionalStates) {
-    console.log("[Orbital] Generating functional states...");
-    await delay(100);
-    try {
-      const statesResult = await generateSingleOrbitalSheet(
-        ai,
-        'orbital_states',
-        imageBase64,
-        fullConfig,
-        masterSeed,
-        baseSheetBase64
-      );
-      if (statesResult.frames.length > 0) {
-        allFrames = [...allFrames, ...statesResult.frames];
-        onFrameUpdate(allFrames);
-      }
-    } catch (e) {
-      console.warn("[Orbital] States sheet generation failed:", e);
-    }
-  }
+  allFrames = [...allFrames, ...interpolatedFrames];
+  allFrames.sort((a, b) => a.angle - b.angle);
+  onFrameUpdate(allFrames);
 
-  // 5. GENERATE MACRO DETAILS (Optional - Can use AI or Virtual Macro)
-  if (fullConfig.enableMacroLens) {
-    console.log("[Orbital] Generating macro detail views...");
+  console.log(`[Orbital] === COMPLETE ===`);
+  console.log(`[Orbital] ${allFrames.length} total frames: ${allFrames.map(f => Math.round(f.angle) + '°').join(', ')}`);
 
-    // First, try virtual macros (no API cost)
-    const defaultMacroRegions = [
-      { name: 'center', x: 0.25, y: 0.25, width: 0.5, height: 0.5 },
-      { name: 'top_detail', x: 0.2, y: 0.1, width: 0.6, height: 0.4 },
-      { name: 'bottom_detail', x: 0.2, y: 0.5, width: 0.6, height: 0.4 },
-    ];
-
-    const virtualMacros = await generateVirtualMacros(allFrames, defaultMacroRegions);
-    allFrames = [...allFrames, ...virtualMacros];
-    onFrameUpdate(allFrames);
-
-    // Optionally, also generate AI macro sheet for higher quality
-    await delay(100);
-    try {
-      const macroResult = await generateSingleOrbitalSheet(
-        ai,
-        'orbital_macro',
-        imageBase64,
-        fullConfig,
-        masterSeed,
-        baseSheetBase64
-      );
-      if (macroResult.frames.length > 0) {
-        allFrames = [...allFrames, ...macroResult.frames];
-        onFrameUpdate(allFrames);
-      }
-    } catch (e) {
-      console.warn("[Orbital] Macro sheet generation failed:", e);
-    }
-  }
-
-  console.log(`[Orbital] Generation complete. Total frames: ${allFrames.length}`);
   return { frames: allFrames };
 };
 
