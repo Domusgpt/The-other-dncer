@@ -957,148 +957,152 @@ const generateVirtualMacros = async (
   return macroFrames;
 };
 
-/**
- * CLOCK-FACE ORBITAL GENERATION
- * Uses clock positions (12, 1, 2... 11 o'clock) for intuitive angle description
- *
- * Clock to Degrees mapping:
- * 12:00 = 0° (FRONT)    3:00 = 90° (RIGHT)
- * 6:00 = 180° (BACK)    9:00 = 270° (LEFT)
- */
+// ============================================================================
+// TURNTABLE PRODUCT GRID GENERATION - Strict Consistency Engine
+// ============================================================================
 
-const CLOCK_TO_DEGREES: Record<number, number> = {
+// Model options
+const ORBITAL_MODELS = {
+  flash: 'gemini-2.5-flash-image',      // Lower cost, good for testing
+  pro: 'gemini-3-pro-image-preview'     // Better spatial accuracy, higher cost
+} as const;
+
+// Degrees for each clock position (product rotates, camera fixed)
+const CLOCK_DEGREES: Record<number, number> = {
   12: 0,   1: 30,   2: 60,   3: 90,
   4: 120,  5: 150,  6: 180,  7: 210,
   8: 240,  9: 270,  10: 300, 11: 330
 };
 
 /**
- * Build clock-face prompt with visual diagram
+ * STRICT TURNTABLE PROMPT
+ * Key principles:
+ * 1. Camera stays fixed, product rotates on turntable
+ * 2. Every frame MUST show a different rotation angle
+ * 3. Size, lighting, and centering are LOCKED constants
  */
-const constructClockPrompt = (
+const buildTurntablePrompt = (
   productName: string,
-  clockPositions: number[] // e.g., [12, 1, 2, 3, 4, 5]
+  clockPositions: number[]
 ): string => {
-  const positions = clockPositions.map(h => `${h}:00`).join(', ');
+  // Build angle descriptions based on what's visible at each rotation
+  const angleDescriptions = clockPositions.map(hour => {
+    const deg = CLOCK_DEGREES[hour];
+    let visible = '';
+    if (hour === 12) visible = 'front face only';
+    else if (hour === 3) visible = 'right side only';
+    else if (hour === 6) visible = 'back face only';
+    else if (hour === 9) visible = 'left side only';
+    else if (hour === 1) visible = 'front + slight right edge';
+    else if (hour === 2) visible = 'front-right corner (45° between front and right)';
+    else if (hour === 4) visible = 'right + slight back edge';
+    else if (hour === 5) visible = 'right-back corner (45° between right and back)';
+    else if (hour === 7) visible = 'back + slight left edge';
+    else if (hour === 8) visible = 'back-left corner (45° between back and left)';
+    else if (hour === 10) visible = 'left + slight front edge';
+    else if (hour === 11) visible = 'left-front corner (45° between left and front)';
+    return { hour, deg, visible };
+  });
 
-  return `You are a product photographer. Create a 3×2 grid image (768×512 pixels) showing "${productName}" from 6 different angles.
+  return `TASK: Product turntable photography grid
 
-CLOCK-FACE VIEWING POSITIONS:
-Imagine you're standing at different positions around a clock, looking at the product in the center.
+You are photographing "${productName}" on a motorized turntable. Your camera is FIXED in one position. The turntable rotates the product to show different angles.
 
-                    12:00 (FRONT)
-                         ↓
-            11:00  ←─────┼─────→  1:00
-                   ╲     │     ╱
-           10:00 ←──╲────┼────╱──→ 2:00
-                     ╲   │   ╱
-            9:00 ←────[PRODUCT]────→ 3:00
-             (LEFT)      │      (RIGHT)
-                     ╱   │   ╲
-            8:00 ←──╱────┼────╲──→ 4:00
-                   ╱     │     ╲
-             7:00  ←─────┼─────→  5:00
-                         ↑
-                    6:00 (BACK)
+OUTPUT: A 3×2 grid (6 cells).
+Total image dimensions: 1536×1024 pixels (3:2 aspect ratio).
+Each cell: 512×512 pixels.
 
-YOUR 6 PHOTOGRAPHS (positions: ${positions}):
-+------------------+------------------+------------------+
-|   ${clockPositions[0]}:00 position  |   ${clockPositions[1]}:00 position  |   ${clockPositions[2]}:00 position  |
-|   (${CLOCK_TO_DEGREES[clockPositions[0]]}°)           |   (${CLOCK_TO_DEGREES[clockPositions[1]]}°)           |   (${CLOCK_TO_DEGREES[clockPositions[2]]}°)           |
-+------------------+------------------+------------------+
-|   ${clockPositions[3]}:00 position  |   ${clockPositions[4]}:00 position  |   ${clockPositions[5]}:00 position  |
-|   (${CLOCK_TO_DEGREES[clockPositions[3]]}°)          |   (${CLOCK_TO_DEGREES[clockPositions[4]]}°)          |   (${CLOCK_TO_DEGREES[clockPositions[5]]}°)          |
-+------------------+------------------+------------------+
+THE 6 ROTATIONS (reading left-to-right, top-to-bottom):
+${angleDescriptions.slice(0, 3).map((a, i) => `Cell ${i + 1}: Product rotated ${a.deg}° → shows ${a.visible}`).join('\n')}
+${angleDescriptions.slice(3, 6).map((a, i) => `Cell ${i + 4}: Product rotated ${a.deg}° → shows ${a.visible}`).join('\n')}
 
-WHAT EACH POSITION SEES:
-${clockPositions.map(h => {
-  const deg = CLOCK_TO_DEGREES[h];
-  let desc = '';
-  if (h === 12) desc = 'FRONT face directly';
-  else if (h === 6) desc = 'BACK face directly';
-  else if (h === 3) desc = 'RIGHT side profile';
-  else if (h === 9) desc = 'LEFT side profile';
-  else if (h === 1 || h === 2) desc = 'Front turning toward right side';
-  else if (h === 4 || h === 5) desc = 'Right side turning toward back';
-  else if (h === 7 || h === 8) desc = 'Back turning toward left side';
-  else if (h === 10 || h === 11) desc = 'Left side turning toward front';
-  return `• ${h}:00 (${deg}°): You see the ${desc}`;
-}).join('\n')}
+LOCKED CONSTANTS (do not vary between cells):
+• Product SIZE: identical in all 6 cells, fills ~80% of cell height
+• Product POSITION: dead center of each cell, equal margins all sides
+• LIGHTING: soft diffused studio light from upper-left, no harsh shadows
+• BACKGROUND: pure flat white (#FFFFFF)
+• CAMERA: eye-level, same distance in every cell
 
-REQUIREMENTS:
-• Each cell shows a DIFFERENT viewing angle
-• Product CENTERED and SAME SIZE in all 6 cells
-• Pure white background
-• Consistent soft lighting
-• Cell size: 256×256 pixels each`;
+CRITICAL REQUIREMENT:
+Each cell MUST show a VISIBLY DIFFERENT angle. The product rotates 30° between adjacent cells. If cell 1 shows the front, cell 2 must show the front turning toward the right side - NOT the same front view again.
+
+Reference image shows the product from one angle. Generate the other 5 angles by rotating it on the turntable.`;
 };
 
 /**
- * Slice a 3x2 grid (768x512) into 6 frames
+ * Slice a 3×2 turntable grid into 6 frames
+ * Grid: 1536×1024 total, each cell 512×512
  */
-const sliceClockSheet = async (base64Image: string): Promise<string[]> => {
+const sliceTurntableGrid = async (base64Image: string): Promise<string[]> => {
+  const GRID_W = 1536;
+  const GRID_H = 1024;
+  const CELL_SIZE = 512;
+  const COLS = 3;
+  const ROWS = 2;
+
   try {
     const img = await loadImageWithTimeout(base64Image, 8000);
 
+    // Normalize to expected grid dimensions
     const canvas = document.createElement('canvas');
-    canvas.width = 768;
-    canvas.height = 512;
+    canvas.width = GRID_W;
+    canvas.height = GRID_H;
     const ctx = canvas.getContext('2d');
-    if (!ctx) throw new Error("Canvas failed");
+    if (!ctx) throw new Error("Canvas context failed");
 
-    // Stretch to fit expected dimensions
-    ctx.drawImage(img, 0, 0, img.width, img.height, 0, 0, 768, 512);
+    ctx.drawImage(img, 0, 0, img.width, img.height, 0, 0, GRID_W, GRID_H);
 
     const frames: string[] = [];
-    const CELL_W = 256;
-    const CELL_H = 256;
 
-    // 3 columns x 2 rows = 6 cells
-    for (let row = 0; row < 2; row++) {
-      for (let col = 0; col < 3; col++) {
+    for (let row = 0; row < ROWS; row++) {
+      for (let col = 0; col < COLS; col++) {
         const cellCanvas = document.createElement('canvas');
-        cellCanvas.width = CELL_W;
-        cellCanvas.height = CELL_H;
+        cellCanvas.width = CELL_SIZE;
+        cellCanvas.height = CELL_SIZE;
         const cellCtx = cellCanvas.getContext('2d');
 
         if (cellCtx) {
           cellCtx.drawImage(
             canvas,
-            col * CELL_W, row * CELL_H, CELL_W, CELL_H,
-            0, 0, CELL_W, CELL_H
+            col * CELL_SIZE, row * CELL_SIZE, CELL_SIZE, CELL_SIZE,
+            0, 0, CELL_SIZE, CELL_SIZE
           );
-          frames.push(cellCanvas.toDataURL('image/jpeg', 0.85));
+          frames.push(cellCanvas.toDataURL('image/jpeg', 0.9)); // Higher quality
         }
       }
     }
     return frames;
   } catch (e) {
-    console.error("Slice clock sheet failed:", e);
+    console.error("[Orbital] Grid slicing failed:", e);
     return [];
   }
 };
 
 /**
- * Generate one clock-face sheet (6 frames)
+ * Generate one turntable grid (6 frames)
+ * @param useProModel - Use Gemini 3 Pro for better spatial accuracy
  */
-const generateClockSheet = async (
+const generateTurntableGrid = async (
   ai: GoogleGenAI,
   clockPositions: number[],
   referenceImage: string,
   productName: string,
-  seed: number
+  seed: number,
+  useProModel: boolean = false
 ): Promise<OrbitalFrame[]> => {
 
-  const prompt = constructClockPrompt(productName, clockPositions);
+  const model = useProModel ? ORBITAL_MODELS.pro : ORBITAL_MODELS.flash;
+  const prompt = buildTurntablePrompt(productName, clockPositions);
   const cleanImage = referenceImage.includes('base64,')
     ? referenceImage.split('base64,')[1]
     : referenceImage;
 
-  console.log(`[Orbital] Generating clock positions: ${clockPositions.join(', ')} o'clock`);
+  console.log(`[Orbital] Model: ${model}`);
+  console.log(`[Orbital] Generating rotations: ${clockPositions.map(h => CLOCK_DEGREES[h] + '°').join(', ')}`);
 
   try {
     const response = await generateWithRetry(ai, {
-      model: 'gemini-2.5-flash-image',
+      model,
       contents: {
         parts: [
           { inlineData: { mimeType: 'image/jpeg', data: cleanImage } },
@@ -1107,12 +1111,12 @@ const generateClockSheet = async (
       },
       config: {
         imageConfig: { aspectRatio: "3:2" },
-        seed: seed
+        seed
       }
     });
 
     const candidate = response.candidates?.[0];
-    if (!candidate) throw new Error("No candidates");
+    if (!candidate) throw new Error("No candidates returned from API");
 
     let sheetBase64: string | undefined;
     for (const part of candidate.content?.parts || []) {
@@ -1123,15 +1127,15 @@ const generateClockSheet = async (
     }
 
     if (!sheetBase64) {
-      console.warn(`[Orbital] Clock sheet returned no image`);
+      console.warn(`[Orbital] Grid returned no image data`);
       return [];
     }
 
-    const rawFrames = await sliceClockSheet(`data:image/jpeg;base64,${sheetBase64}`);
+    const rawFrames = await sliceTurntableGrid(`data:image/jpeg;base64,${sheetBase64}`);
 
     const frames: OrbitalFrame[] = rawFrames.map((url, i) => ({
       url,
-      angle: CLOCK_TO_DEGREES[clockPositions[i]],
+      angle: CLOCK_DEGREES[clockPositions[i]],
       pitch: 0,
       state: 'closed' as OrbitalProductState,
       role: 'orbital' as SheetRole,
@@ -1139,18 +1143,21 @@ const generateClockSheet = async (
       isMacro: false
     }));
 
-    console.log(`[Orbital] Got ${frames.length} frames: ${frames.map(f => f.angle + '°').join(', ')}`);
+    console.log(`[Orbital] ✓ ${frames.length} frames: ${frames.map(f => f.angle + '°').join(', ')}`);
     return frames;
 
-  } catch (e) {
-    console.error(`[Orbital] Clock sheet failed:`, e);
+  } catch (e: any) {
+    console.error(`[Orbital] Grid generation failed:`, e?.message || e);
     return [];
   }
 };
 
 /**
- * MAIN ORBITAL GENERATION - Clock Face Approach
- * Generates 12 frames (all clock positions) in 2 parallel API calls
+ * MAIN ORBITAL GENERATION
+ * Generates 12 frames (full 360° rotation) in 2 parallel API calls
+ *
+ * Options:
+ * - useProModel: Use Gemini 3 Pro for better spatial accuracy (higher cost)
  */
 export const generateOrbitalFrames = async (
   imageBase64: string,
@@ -1164,36 +1171,39 @@ export const generateOrbitalFrames = async (
   const ai = new GoogleGenAI({ apiKey: API_KEY });
   const seed = Math.floor(Math.random() * 2147483647);
 
-  console.log("[Orbital] === CLOCK-FACE GENERATION (12 positions) ===");
-  console.log("[Orbital] Seed:", seed);
+  const modelName = fullConfig.useProModel ? 'Gemini 3 Pro' : 'Gemini 2.5 Flash';
+  console.log(`[Orbital] === TURNTABLE GENERATION (12 rotations) ===`);
+  console.log(`[Orbital] Model: ${modelName}`);
+  console.log(`[Orbital] Product: ${fullConfig.productName}`);
+  console.log(`[Orbital] Seed: ${seed}`);
 
-  // Two sheets generated IN PARALLEL
-  // Sheet A: 12, 1, 2, 3, 4, 5 o'clock (front-right half)
-  // Sheet B: 6, 7, 8, 9, 10, 11 o'clock (back-left half)
+  // Two grids generated IN PARALLEL
+  // Grid A: Front half (0°, 30°, 60°, 90°, 120°, 150°)
+  // Grid B: Back half (180°, 210°, 240°, 270°, 300°, 330°)
 
   const frontReference = imageBase64;
   const backReference = fullConfig.backImageBase64 || imageBase64;
 
-  console.log("[Orbital] Starting PARALLEL generation of both sheets...");
+  console.log("[Orbital] Starting PARALLEL generation...");
 
-  const [sheetA, sheetB] = await Promise.all([
-    generateClockSheet(ai, [12, 1, 2, 3, 4, 5], frontReference, fullConfig.productName, seed),
-    generateClockSheet(ai, [6, 7, 8, 9, 10, 11], backReference, fullConfig.productName, seed + 1)
+  const [gridA, gridB] = await Promise.all([
+    generateTurntableGrid(ai, [12, 1, 2, 3, 4, 5], frontReference, fullConfig.productName, seed, fullConfig.useProModel),
+    generateTurntableGrid(ai, [6, 7, 8, 9, 10, 11], backReference, fullConfig.productName, seed + 1, fullConfig.useProModel)
   ]);
 
-  let allFrames = [...sheetA, ...sheetB];
+  let allFrames = [...gridA, ...gridB];
 
   if (allFrames.length === 0) {
-    throw new Error("Both clock sheets failed to generate.");
+    throw new Error("Generation failed - no frames produced");
   }
 
-  // Sort by angle
+  // Sort by angle for proper rotation sequence
   allFrames.sort((a, b) => a.angle - b.angle);
 
   onFrameUpdate(allFrames);
 
-  console.log(`[Orbital] === COMPLETE: ${allFrames.length} frames ===`);
-  console.log(`[Orbital] Angles: ${allFrames.map(f => f.angle + '°').join(', ')}`);
+  console.log(`[Orbital] === COMPLETE ===`);
+  console.log(`[Orbital] ${allFrames.length} frames: ${allFrames.map(f => f.angle + '°').join(' → ')}`);
 
   return { frames: allFrames };
 };

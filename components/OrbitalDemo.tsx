@@ -385,6 +385,20 @@ export const OrbitalDemo: React.FC<OrbitalDemoProps> = ({ onBack }) => {
                     Generation Options
                   </h3>
 
+                  {/* Pro Model Toggle - Separate for visibility */}
+                  <label className="flex items-start gap-4 p-4 bg-gradient-to-r from-purple-500/10 to-cyan-500/10 border border-purple-500/30 rounded-xl cursor-pointer hover:border-purple-500/50 transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={config.useProModel}
+                      onChange={(e) => setConfig(prev => ({ ...prev, useProModel: e.target.checked }))}
+                      className="mt-1 w-5 h-5 rounded border-purple-500/50 bg-white/10 text-purple-500 focus:ring-purple-500"
+                    />
+                    <div>
+                      <p className="font-medium text-purple-300">Use Pro Model (Gemini 3 Pro)</p>
+                      <p className="text-sm text-gray-500">Better spatial accuracy & angle consistency. Higher cost - use to test quality.</p>
+                    </div>
+                  </label>
+
                   {[
                     { key: 'enableHemisphereCompletion', label: 'Hemisphere Completion', desc: 'Mirror frames for full 360° (saves 50% API cost)' },
                     { key: 'enableMacroLens', label: 'Macro Detail Views', desc: 'Generate zoom views of product details' },

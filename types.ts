@@ -44,6 +44,7 @@ export interface OrbitalConfig {
   productName: string;
   frontImageBase64?: string;          // Front view (0°) reference image
   backImageBase64?: string;           // Back view (180°) reference image - CRITICAL for accurate rotation
+  useProModel: boolean;               // Use gemini-3-pro-image-preview for better spatial accuracy (higher cost)
   enableHemisphereCompletion: boolean;  // Mirror 0-90° to get 270-360°
   enablePitchViews: boolean;            // Generate elevation angles
   enableFunctionalStates: boolean;      // Open/closed/exploded views
@@ -56,6 +57,7 @@ export interface OrbitalConfig {
 
 export const DEFAULT_ORBITAL_CONFIG: OrbitalConfig = {
   productName: 'Product',
+  useProModel: false,                 // Default to Flash for lower cost, enable Pro for accuracy testing
   enableHemisphereCompletion: true,
   enablePitchViews: false,
   enableFunctionalStates: false,
