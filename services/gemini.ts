@@ -533,95 +533,151 @@ const constructOrbitalPrompt = (
   role: SheetRole,
   macroRegions?: string[]
 ): string => {
-  let prompt = `TASK: Generate a strict 4x4 Turn-Table Sprite Sheet for e-commerce product visualization.
+  let prompt = `
+╔═══════════════════════════════════════════════════════════════════════════════╗
+║                    360° PRODUCT TURNTABLE SPRITE SHEET                        ║
+║                         EXACT SPECIFICATION v2.0                              ║
+╚═══════════════════════════════════════════════════════════════════════════════╝
 
-SUBJECT: ${productName}
+SUBJECT: "${productName}"
 
-═══════════════════════════════════════════════════════════════════
-OUTPUT SPECIFICATION
-═══════════════════════════════════════════════════════════════════
-• OUTPUT: 1024×1024px image containing 4×4 grid (16 cells, 256×256px each)
-• QUALITY: Product photography style - sharp focus, professional presentation
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ OUTPUT IMAGE SPECIFICATION                                                    ┃
+┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┫
+┃ • Total Size: 1024 × 1024 pixels (EXACTLY)                                   ┃
+┃ • Grid: 4 columns × 4 rows = 16 cells                                        ┃
+┃ • Each Cell: 256 × 256 pixels (EXACTLY)                                      ┃
+┃ • Format: Single image with 16 frames arranged in grid                       ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-MECHANICAL RULES (CRITICAL):
-1. GRID: Exactly 4 columns × 4 rows = 16 frames total
-2. CELL SIZE: Each frame occupies exactly 256×256px
-3. LIGHTING: CONSTANT soft-box lighting across ALL frames (no shadows)
-4. SCALE: Object fills 80% of each cell, perfectly centered
-5. BACKGROUND: Pure white (#FFFFFF) - NO gradients, NO shadows
-6. CAMERA: Fixed position, eye-level, equal distance from subject
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ TECHNICAL REQUIREMENTS (MANDATORY FOR EVERY FRAME)                           ┃
+┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┫
+┃ 1. CAMERA: Fixed position, eye-level, SAME distance for ALL 16 frames       ┃
+┃ 2. LIGHTING: Soft diffused light, NO harsh shadows, IDENTICAL in all frames ┃
+┃ 3. BACKGROUND: Pure white (#FFFFFF), clean, no gradients or shadows         ┃
+┃ 4. SCALE: Object fills 80% of cell height, IDENTICAL size in all frames     ┃
+┃ 5. CENTERING: Object perfectly centered in each cell (X and Y)              ┃
+┃ 6. CONSISTENCY: Same object, same lighting, same scale, same background     ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 `;
 
   if (role === 'orbital') {
     // Primary Y-axis rotation sheet - FULL 360° revolution
-    prompt += `═══════════════════════════════════════════════════════════════════
-🚨 CRITICAL REQUIREMENT: 16 VISUALLY DISTINCT ROTATION FRAMES 🚨
-═══════════════════════════════════════════════════════════════════
+    prompt += `
+╔═══════════════════════════════════════════════════════════════════════════════╗
+║  ⚠️  CRITICAL: YOU ARE GENERATING 16 DIFFERENT ROTATION ANGLES  ⚠️           ║
+╚═══════════════════════════════════════════════════════════════════════════════╝
 
-You MUST generate ONE FULL ORBITAL REVOLUTION of this object.
-Each of the 16 grid cells shows the SAME object from a DIFFERENT angle.
-Think of it like a turntable spinning: the object rotates, camera stays fixed.
+THE CONCEPT:
+Imagine the object is placed on a turntable. The camera is fixed in one position.
+The turntable ROTATES the object 360° (one complete revolution).
+We capture 16 photographs at equal intervals as it spins.
 
-⚠️ DO NOT generate 16 copies of the same view!
-⚠️ EVERY CELL must show the object rotated to a NEW angle!
-⚠️ The viewer will animate through these frames - they MUST be different!
+                        CAMERA (FIXED - NEVER MOVES)
+                              │
+                              │ (always watching from here)
+                              ▼
+                    ┌─────────────────────┐
+                    │                     │
+                    │    ════════════     │
+                    │   ╱   OBJECT   ╲    │  ← Object sits on turntable
+                    │  ╱             ╲   │
+                    │ ═══════════════════ │  ← Turntable rotates ↻ clockwise
+                    │                     │
+                    └─────────────────────┘
 
-GRID LAYOUT - 16 FRAMES, 16 DIFFERENT ANGLES:
-┌─────────┬─────────┬─────────┬─────────┐
-│   0°    │   22°   │   45°   │   67°   │  ← Row 1: FRONT rotating to RIGHT
-│ (FRONT) │(turn 1) │(turn 2) │(turn 3) │
-├─────────┼─────────┼─────────┼─────────┤
-│   90°   │  112°   │  135°   │  157°   │  ← Row 2: RIGHT rotating to BACK
-│ (RIGHT) │(turn 4) │(turn 5) │(turn 6) │
-├─────────┼─────────┼─────────┼─────────┤
-│  180°   │  202°   │  225°   │  247°   │  ← Row 3: BACK rotating to LEFT
-│ (BACK)  │(turn 7) │(turn 8) │(turn 9) │
-├─────────┼─────────┼─────────┼─────────┤
-│  270°   │  292°   │  315°   │  337°   │  ← Row 4: LEFT rotating to FRONT
-│ (LEFT)  │(turn10) │(turn11) │(turn12) │
-└─────────┴─────────┴─────────┴─────────┘
+RESULT: 16 frames showing the object from 16 different angles around it.
 
-WHAT EACH FRAME MUST SHOW:
-• Frame 0 (0°):   FRONT - You see the FRONT of the object
-• Frame 1 (22°):  Front rotated slightly right
-• Frame 2 (45°):  Halfway between front and right side
-• Frame 3 (67°):  Almost right side, front corner visible
-• Frame 4 (90°):  RIGHT SIDE - Perfect profile view
-• Frame 5 (112°): Right side with back corner appearing
-• Frame 6 (135°): Halfway between right and back
-• Frame 7 (157°): Almost back view, right corner visible
-• Frame 8 (180°): BACK - You see the BACK of the object
-• Frame 9 (202°): Back rotated slightly showing left
-• Frame 10 (225°): Halfway between back and left
-• Frame 11 (247°): Almost left side, back corner visible
-• Frame 12 (270°): LEFT SIDE - Perfect profile view
-• Frame 13 (292°): Left side with front corner appearing
-• Frame 14 (315°): Halfway between left and front
-• Frame 15 (337°): Almost front view, left corner visible
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ THE 16 ROTATION ANGLES (READ LEFT→RIGHT, TOP→BOTTOM)                         ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-TURNTABLE VISUALIZATION:
-         CAMERA (fixed position)
-              │
-              │
-              ▼
-    ┌─────────────────────┐
-    │    TURNTABLE        │
-    │         ↻           │  Object spins clockwise
-    │    [OBJECT]         │  Camera watches from one spot
-    │                     │
-    └─────────────────────┘
+╔══════════╦══════════╦══════════╦══════════╗
+║   CELL   ║   CELL   ║   CELL   ║   CELL   ║
+║    0     ║    1     ║    2     ║    3     ║  ROW 1
+║  ┌───┐   ║  ┌───┐   ║  ┌───┐   ║  ┌───┐   ║
+║  │ F │   ║  │/F │   ║  │ / │   ║  │  /│   ║  F=Front visible
+║  │ R │   ║  │ R │   ║  │ R │   ║  │ R │   ║  R=Right emerging
+║  │ O │   ║  │ O │   ║  │ O │   ║  │ O │   ║
+║  │ N │   ║  │ N │   ║  │ N │   ║  │ N │   ║
+║  │ T │   ║  │ T │   ║  │ T │   ║  │ T │   ║
+║  └───┘   ║  └───┘   ║  └───┘   ║  └───┘   ║
+║   0°     ║   22°    ║   45°    ║   67°    ║
+║ (FRONT)  ║          ║          ║          ║
+╠══════════╬══════════╬══════════╬══════════╣
+║   CELL   ║   CELL   ║   CELL   ║   CELL   ║
+║    4     ║    5     ║    6     ║    7     ║  ROW 2
+║  ┌───┐   ║  ┌───┐   ║  ┌───┐   ║  ┌───┐   ║
+║  │   │   ║  │   │   ║  │   │   ║  │   │   ║
+║  │ R │   ║  │ R/│   ║  │  /│   ║  │  B│   ║  R=Right, B=Back emerging
+║  │ I │   ║  │ I │   ║  │ B │   ║  │ A │   ║
+║  │ G │   ║  │ G │   ║  │ A │   ║  │ C │   ║
+║  │ H │   ║  │ H │   ║  │ C │   ║  │ K │   ║
+║  │ T │   ║  │ T │   ║  │ K │   ║  │   │   ║
+║  └───┘   ║  └───┘   ║  └───┘   ║  └───┘   ║
+║   90°    ║   112°   ║   135°   ║   157°   ║
+║ (RIGHT)  ║          ║          ║          ║
+╠══════════╬══════════╬══════════╬══════════╣
+║   CELL   ║   CELL   ║   CELL   ║   CELL   ║
+║    8     ║    9     ║   10     ║   11     ║  ROW 3
+║  ┌───┐   ║  ┌───┐   ║  ┌───┐   ║  ┌───┐   ║
+║  │ B │   ║  │B/ │   ║  │ / │   ║  │  /│   ║
+║  │ A │   ║  │A  │   ║  │ L │   ║  │ L │   ║  B=Back, L=Left emerging
+║  │ C │   ║  │C  │   ║  │ E │   ║  │ E │   ║
+║  │ K │   ║  │K  │   ║  │ F │   ║  │ F │   ║
+║  │   │   ║  │   │   ║  │ T │   ║  │ T │   ║
+║  └───┘   ║  └───┘   ║  └───┘   ║  └───┘   ║
+║   180°   ║   202°   ║   225°   ║   247°   ║
+║ (BACK)   ║          ║          ║          ║
+╠══════════╬══════════╬══════════╬══════════╣
+║   CELL   ║   CELL   ║   CELL   ║   CELL   ║
+║   12     ║   13     ║   14     ║   15     ║  ROW 4
+║  ┌───┐   ║  ┌───┐   ║  ┌───┐   ║  ┌───┐   ║
+║  │ L │   ║  │L/ │   ║  │ / │   ║  │  /│   ║
+║  │ E │   ║  │E  │   ║  │ F │   ║  │ F │   ║  L=Left, F=Front returning
+║  │ F │   ║  │F  │   ║  │ R │   ║  │ R │   ║
+║  │ T │   ║  │T  │   ║  │ O │   ║  │ O │   ║
+║  │   │   ║  │   │   ║  │ N │   ║  │ N │   ║
+║  └───┘   ║  └───┘   ║  └───┘   ║  └───┘   ║
+║   270°   ║   292°   ║   315°   ║   337°   ║
+║ (LEFT)   ║          ║          ║          ║
+╚══════════╩══════════╩══════════╩══════════╝
 
-The object makes ONE COMPLETE 360° ROTATION.
-You capture 16 snapshots at equal intervals (every 22.5°).
-When played back, it creates a smooth spinning animation.
+EXPLICIT FRAME DESCRIPTIONS:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+FRAME 0  (0°):   FRONT - Full frontal view, object facing camera directly
+FRAME 1  (22°):  Object rotated 22° clockwise, slight right side visible
+FRAME 2  (45°):  Object rotated 45°, equal parts front and right visible
+FRAME 3  (67°):  Object rotated 67°, mostly right side, corner of front visible
+FRAME 4  (90°):  RIGHT - Perfect side profile, object's right side to camera
+FRAME 5  (112°): Object rotated 112°, right side with back corner appearing
+FRAME 6  (135°): Object rotated 135°, equal parts right and back visible
+FRAME 7  (157°): Object rotated 157°, mostly back, corner of right visible
+FRAME 8  (180°): BACK - Full rear view, object's back facing camera
+FRAME 9  (202°): Object rotated 202°, back with left side emerging
+FRAME 10 (225°): Object rotated 225°, equal parts back and left visible
+FRAME 11 (247°): Object rotated 247°, mostly left side, corner of back visible
+FRAME 12 (270°): LEFT - Perfect side profile, object's left side to camera
+FRAME 13 (292°): Object rotated 292°, left side with front corner appearing
+FRAME 14 (315°): Object rotated 315°, equal parts left and front visible
+FRAME 15 (337°): Object rotated 337°, mostly front, corner of left visible
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-TECHNICAL REQUIREMENTS:
-• Camera: Fixed position, eye-level, same distance for all frames
-• Lighting: Soft-box, consistent across ALL frames
-• Background: Pure white (#FFFFFF)
-• Scale: Object fills 80% of cell, perfectly centered
-• NO shadows, NO reflections on background
+⛔ FAILURE CONDITIONS (DO NOT DO THESE):
+• DO NOT generate 16 copies of the same angle
+• DO NOT vary the lighting between frames
+• DO NOT change the object's size between frames
+• DO NOT add shadows or reflections
+• DO NOT change the camera distance or height
+• DO NOT skip any rotation angles
+
+✅ SUCCESS CRITERIA:
+• Each frame shows the object from a DIFFERENT angle
+• When animated in sequence, object appears to spin smoothly
+• All 16 frames have IDENTICAL lighting, scale, and background
+• Clear visual difference between adjacent frames (22° rotation each)
 `;
   } else if (role === 'orbital_pitch') {
     // Elevation/pitch views
