@@ -1084,7 +1084,7 @@ export const generateOrbitalFrames = async (
       model,
       contents: { parts },
       config: {
-        imageConfig: { aspectRatio: "2:1" }, // 4×2 grid
+        imageConfig: { aspectRatio: "16:9" }, // Closest to 4×2 grid (valid: 1:1, 3:2, 4:3, 16:9, etc.)
         seed
       }
     });
